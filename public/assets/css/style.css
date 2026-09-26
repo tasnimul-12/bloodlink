@@ -1,0 +1,274 @@
+/**
+ * BloodLink - Healthcare Design System & Styles
+ */
+
+:root {
+    --primary-red: #d32f2f;
+    --primary-dark: #9a0007;
+    --primary-light: #ff6659;
+    --accent-blue: #0288d1;
+    --bg-light: #f8fafc;
+    --card-border: #e2e8f0;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --shadow-soft: 0 4px 15px rgba(0, 0, 0, 0.05);
+    --shadow-hover: 0 8px 25px rgba(211, 47, 47, 0.12);
+}
+
+body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--bg-light);
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Navbar */
+.navbar-bloodlink {
+    min-height: 76px;
+    background: rgba(255, 255, 255, 0.97);
+    border-bottom: 1px solid #e8e9ec;
+    box-shadow: 0 5px 22px rgba(31, 41, 55, 0.06);
+    backdrop-filter: blur(14px);
+}
+
+.navbar-bloodlink .container {
+    gap: 1.25rem;
+}
+
+.navbar-bloodlink .navbar-collapse {
+    align-items: center;
+}
+
+.navbar-bloodlink .navbar-nav {
+    gap: 0.2rem;
+}
+
+.navbar-bloodlink .nav-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 42px;
+    padding: 0.55rem 0.72rem !important;
+    border-radius: 8px;
+    color: #505965;
+    font-size: 0.875rem;
+    line-height: 1.25;
+    white-space: nowrap;
+    transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.navbar-bloodlink .nav-link:hover,
+.navbar-bloodlink .nav-link:focus-visible {
+    color: var(--primary-dark);
+    background: #fff1f1;
+}
+
+.navbar-bloodlink .nav-link:focus-visible,
+.navbar-bloodlink .navbar-toggler:focus-visible {
+    outline: 2px solid var(--primary-red);
+    outline-offset: 2px;
+}
+
+.navbar-bloodlink .nav-link i {
+    font-size: 1rem;
+}
+
+.navbar-bloodlink .navbar-toggler {
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background-color: #fff1f1;
+}
+
+.navbar-bloodlink .dropdown-menu {
+    margin-top: 0.45rem;
+    padding: 0.45rem;
+    border: 1px solid #eceef1 !important;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(31, 41, 55, 0.13) !important;
+}
+
+.navbar-bloodlink .dropdown-item {
+    padding: 0.6rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.navbar-bloodlink .dropdown-item:hover,
+.navbar-bloodlink .dropdown-item:focus {
+    background: #fff1f1;
+    color: var(--primary-dark);
+}
+
+.brand-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    background: linear-gradient(145deg, #e53935, #b71c1c);
+    color: #fff;
+    border-radius: 11px;
+    margin-right: 11px;
+    font-size: 1.2rem;
+    box-shadow: 0 4px 10px rgba(183, 28, 28, 0.2);
+}
+
+.brand-text {
+    font-weight: 800;
+    color: var(--text-main);
+    font-size: 1.3rem;
+    white-space: nowrap;
+}
+
+.brand-text span {
+    color: var(--primary-red);
+}
+
+@media (max-width: 991.98px) {
+    .navbar-bloodlink {
+        min-height: 68px;
+    }
+
+    .navbar-bloodlink .container {
+        gap: 0.5rem;
+    }
+
+    .navbar-bloodlink .navbar-collapse {
+        margin-top: 0.75rem;
+        padding: 0.65rem 0 0.85rem;
+        border-top: 1px solid #eceef1;
+    }
+
+    .navbar-bloodlink .navbar-nav {
+        gap: 0.15rem;
+    }
+
+    .navbar-bloodlink .nav-link {
+        width: 100%;
+        padding: 0.65rem 0.75rem !important;
+    }
+
+    .navbar-bloodlink .navbar-nav.align-items-lg-center {
+        align-items: stretch !important;
+        margin-top: 0.35rem;
+        padding-top: 0.55rem;
+        border-top: 1px solid #eceef1;
+    }
+
+    .navbar-bloodlink .navbar-nav.align-items-lg-center .nav-item {
+        margin-left: 0 !important;
+    }
+
+    .navbar-bloodlink .navbar-nav.align-items-lg-center .btn {
+        margin-top: 0.35rem;
+    }
+}
+
+/* Cards & Surfaces */
+.card-bloodlink {
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    background: #ffffff;
+    box-shadow: var(--shadow-soft);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-bloodlink:hover {
+    box-shadow: var(--shadow-hover);
+}
+
+.card-kpi {
+    border-left: 4px solid var(--primary-red);
+}
+
+.kpi-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+}
+
+/* Blood Group Badges */
+.badge-blood {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.35rem 0.65rem;
+    font-weight: 800;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+}
+
+.badge-blood-A { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.badge-blood-B { background: #e0f2fe; color: #075985; border: 1px solid #7dd3fc; }
+.badge-blood-AB { background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; }
+.badge-blood-O { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+
+/* Status Badges */
+.badge-status {
+    padding: 0.35rem 0.65rem;
+    font-weight: 600;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+}
+
+.badge-status-available { background: #dcfce7; color: #166534; }
+.badge-status-reserved { background: #fef3c7; color: #854d0e; }
+.badge-status-issued { background: #e0f2fe; color: #0369a1; }
+.badge-status-expired { background: #fee2e2; color: #991b1b; }
+.badge-status-discarded { background: #f1f5f9; color: #475569; }
+
+/* Hero Section */
+.hero-gradient {
+    background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 45%, #991b1b 100%);
+    color: #ffffff;
+    border-radius: var(--radius-lg);
+    padding: 4rem 2rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.hero-stats {
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+}
+
+/* Quick Fill Buttons for Demo */
+.btn-demo-badge {
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 0.78rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 6px;
+    margin-right: 0.25rem;
+    margin-bottom: 0.25rem;
+}
+.btn-demo-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+/* Footer */
+footer {
+    margin-top: auto;
+    background: #ffffff;
+    border-top: 1px solid var(--card-border);
+    padding: 2rem 0;
+    color: var(--text-muted);
+}

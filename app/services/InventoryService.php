@@ -1,0 +1,328 @@
+<?php
+/**
+ * BloodLink - Inventory Management & FEFO Service
+ */
+
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/AuditService.php';
+
+class InventoryService {
+    /**
+     * Get available blood bags sorted strictly by FEFO (Earliest Expiry First)
+     */
+    public static function getAvailableInventory(array $filters = []): array {
+        $pdo = Database::getConnection();
+
+        $sql = "
+            SELECT 
+                bb.blood_bag_id,
+                bb.bag_number,
+                bb.blood_group_id,
+                bg.group_name AS blood_group,
+                bb.component_type,
+                bb.quantity_ml,
+                bb.collection_date,
+                bb.expiry_date,
+                DATEDIFF(bb.expiry_date, CURRENT_DATE) AS days_to_expiry,
+                bb.status,
+                bb.storage_location_id,
+                sl.location_code,
+                sl.location_name
+            FROM blood_bags bb
+            JOIN blood_groups bg ON bb.blood_group_id = bg.blood_group_id
+            JOIN storage_locations sl ON bb.storage_location_id = sl.storage_location_id
+            WHERE bb.status = 'AVAILABLE'
+              AND bb.expiry_date >= CURRENT_DATE
+        ";
+
+        $params = [];
+
+        if (!empty($filters['blood_group_id'])) {
+            $sql .= " AND bb.blood_group_id = :blood_group_id";
+            $params[':blood_group_id'] = (int)$filters['blood_group_id'];
+        }
+
+        if (!empty($filters['component_type'])) {
+            $sql .= " AND bb.component_type = :component_type";
+            $params[':component_type'] = $filters['component_type'];
+        }
+
+        if (!empty($filters['storage_location_id'])) {
+            $sql .= " AND bb.storage_location_id = :storage_location_id";
+            $params[':storage_location_id'] = (int)$filters['storage_location_id'];
+        }
+
+        if (!empty($filters['search'])) {
+            $sql .= " AND (bb.bag_number LIKE :search OR sl.location_name LIKE :search)";
+            $params[':search'] = '%' . $filters['search'] . '%';
+        }
+
+        // FEFO Ordering: Earliest expiring units first, then deterministic bag ID
+        $sql .= " ORDER BY bb.expiry_date ASC, bb.blood_bag_id ASC";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Units expiring within threshold days (e.g. <= 7 days)
+     */
+    public static function getNearExpiryInventory(int $days = 7): array {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare("
+            SELECT 
+                bb.blood_bag_id,
+                bb.bag_number,
+                bg.group_name AS blood_group,
+                bb.component_type,
+                bb.quantity_ml,
+                bb.expiry_date,
+                DATEDIFF(bb.expiry_date, CURRENT_DATE) AS days_remaining,
+                sl.location_name
+            FROM blood_bags bb
+            JOIN blood_groups bg ON bb.blood_group_id = bg.blood_group_id
+            JOIN storage_locations sl ON bb.storage_location_id = sl.storage_location_id
+            WHERE bb.status = 'AVAILABLE'
+              AND bb.expiry_date >= CURRENT_DATE
+              AND DATEDIFF(bb.expiry_date, CURRENT_DATE) <= :days
+            ORDER BY bb.expiry_date ASC, bb.blood_bag_id ASC
+        ");
+        $stmt->execute([':days' => $days]);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Units that have passed expiry date or are flagged EXPIRED
+     */
+    public static function getExpiredInventory(): array {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->query("
+            SELECT 
+                bb.blood_bag_id,
+                bb.bag_number,
+                bg.group_name AS blood_group,
+                bb.component_type,
+                bb.quantity_ml,
+                bb.expiry_date,
+                DATEDIFF(CURRENT_DATE, bb.expiry_date) AS days_expired,
+                bb.status,
+                sl.location_name
+            FROM blood_bags bb
+            JOIN blood_groups bg ON bb.blood_group_id = bg.blood_group_id
+            JOIN storage_locations sl ON bb.storage_location_id = sl.storage_location_id
+            WHERE bb.expiry_date < CURRENT_DATE
+               OR bb.status = 'EXPIRED'
+            ORDER BY bb.expiry_date DESC
+        ");
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * DBMS Aggregation: Total units and volume grouped by Blood Group and Component
+     */
+    public static function getInventorySummary(): array {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->query("
+            SELECT 
+                bg.blood_group_id,
+                bg.group_name,
+                bb.component_type,
+                COUNT(bb.blood_bag_id) AS total_units,
+                COALESCE(SUM(bb.quantity_ml), 0) AS total_ml,
+                MIN(bb.expiry_date) AS earliest_expiry
+            FROM blood_groups bg
+            LEFT JOIN blood_bags bb ON bg.blood_group_id = bb.blood_group_id 
+                 AND bb.status = 'AVAILABLE' 
+                 AND bb.expiry_date >= CURRENT_DATE
+            GROUP BY bg.blood_group_id, bg.group_name, bb.component_type
+            ORDER BY bg.blood_group_id ASC
+        ");
+        return $stmt->fetchAll();
+    }
+
+    public static function discardUnit(int $bloodBagId, string $reason, int $userId): array {
+        $pdo = Database::getConnection();
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("SELECT * FROM blood_bags WHERE blood_bag_id = :id FOR UPDATE");
+            $stmt->execute([':id' => $bloodBagId]);
+            $bag = $stmt->fetch();
+
+            if (!$bag) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Blood bag not found.'];
+            }
+
+            if ($bag['status'] === 'DISCARDED' || $bag['status'] === 'ISSUED') {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Bag is already ' . $bag['status'] . '.'];
+            }
+
+            $oldStatus = $bag['status'];
+            $upd = $pdo->prepare("UPDATE blood_bags SET status = 'DISCARDED' WHERE blood_bag_id = :id");
+            $upd->execute([':id' => $bloodBagId]);
+
+            // Insert inventory movement
+            $mov = $pdo->prepare("
+                INSERT INTO inventory_movements (
+                    blood_bag_id, from_location_id, to_location_id, movement_type, quantity_ml,
+                    reason, notes, performed_by, movement_date
+                ) VALUES (
+                    :bag_id, :from_loc, NULL, 'DISCARDED', :qty, :reason, 'Unit decommissioned by administrator', :user_id, NOW()
+                )
+            ");
+            $mov->execute([
+                ':bag_id'   => $bloodBagId,
+                ':from_loc' => $bag['storage_location_id'],
+                ':qty'      => $bag['quantity_ml'],
+                ':reason'   => $reason ?: 'Standard biological waste protocol',
+                ':user_id'  => $userId
+            ]);
+
+            AuditService::log('DISCARD_BAG', 'blood_bags', $bloodBagId, ['status' => $oldStatus], ['status' => 'DISCARDED', 'reason' => $reason], $userId);
+
+            $pdo->commit();
+            return ['success' => true, 'message' => "Blood bag {$bag['bag_number']} marked as DISCARDED."];
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            return ['success' => false, 'message' => 'Failed to discard unit: ' . $e->getMessage()];
+        }
+    }
+
+    public static function transferUnit(int $bloodBagId, int $toLocationId, string $reason, int $userId): array {
+        $pdo = Database::getConnection();
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("SELECT * FROM blood_bags WHERE blood_bag_id = :id FOR UPDATE");
+            $stmt->execute([':id' => $bloodBagId]);
+            $bag = $stmt->fetch();
+
+            if (!$bag) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Blood bag not found.'];
+            }
+
+            if ($bag['status'] !== 'AVAILABLE') {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Only AVAILABLE blood bags can be transferred.'];
+            }
+
+            if ((int)$bag['storage_location_id'] === $toLocationId) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Destination location is the same as current location.'];
+            }
+
+            $fromLocationId = (int)$bag['storage_location_id'];
+
+            $upd = $pdo->prepare("UPDATE blood_bags SET storage_location_id = :to_loc WHERE blood_bag_id = :id");
+            $upd->execute([':to_loc' => $toLocationId, ':id' => $bloodBagId]);
+
+            $mov = $pdo->prepare("
+                INSERT INTO inventory_movements (
+                    blood_bag_id, from_location_id, to_location_id, movement_type, quantity_ml,
+                    reason, notes, performed_by, movement_date
+                ) VALUES (
+                    :bag_id, :from_loc, :to_loc, 'TRANSFERRED', :qty, :reason, 'Inter-facility transfer', :user_id, NOW()
+                )
+            ");
+            $mov->execute([
+                ':bag_id'   => $bloodBagId,
+                ':from_loc' => $fromLocationId,
+                ':to_loc'   => $toLocationId,
+                ':qty'      => $bag['quantity_ml'],
+                ':reason'   => $reason ?: 'Storage optimization / reallocation',
+                ':user_id'  => $userId
+            ]);
+
+            AuditService::log(
+                'TRANSFER_BAG', 
+                'blood_bags', 
+                $bloodBagId, 
+                ['storage_location_id' => $fromLocationId], 
+                ['storage_location_id' => $toLocationId, 'reason' => $reason], 
+                $userId
+            );
+
+            $pdo->commit();
+            return ['success' => true, 'message' => "Blood bag {$bag['bag_number']} successfully transferred."];
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            return ['success' => false, 'message' => 'Transfer failed: ' . $e->getMessage()];
+        }
+    }
+
+    public static function createBloodBag(array $data, int $userId): array {
+        $pdo = Database::getConnection();
+
+        $bagNumber    = trim($data['bag_number'] ?? '');
+        $donationId   = (int)($data['donation_id'] ?? 0);
+        $groupId      = (int)($data['blood_group_id'] ?? 0);
+        $component    = trim($data['component_type'] ?? 'WHOLE_BLOOD');
+        $collectDate  = trim($data['collection_date'] ?? '');
+        $expiryDate   = trim($data['expiry_date'] ?? '');
+        $quantityMl   = (float)($data['quantity_ml'] ?? 450.00);
+        $locationId   = (int)($data['storage_location_id'] ?? 1);
+
+        if (!$bagNumber || !$donationId || !$groupId || !$collectDate || !$expiryDate || $quantityMl <= 0) {
+            return ['success' => false, 'message' => 'Please provide complete valid bag parameters.'];
+        }
+
+        if (strtotime($expiryDate) <= strtotime($collectDate)) {
+            return ['success' => false, 'message' => 'Expiry date must be strictly after collection date.'];
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO blood_bags (
+                    bag_number, donation_id, blood_group_id, component_type,
+                    collection_date, expiry_date, quantity_ml, status, storage_location_id
+                ) VALUES (
+                    :bag_num, :don_id, :group_id, :comp,
+                    :coll_date, :exp_date, :qty, 'AVAILABLE', :loc_id
+                )
+            ");
+            $stmt->execute([
+                ':bag_num'   => $bagNumber,
+                ':don_id'    => $donationId,
+                ':group_id'  => $groupId,
+                ':comp'      => $component,
+                ':coll_date' => $collectDate,
+                ':exp_date'  => $expiryDate,
+                ':qty'       => $quantityMl,
+                ':loc_id'    => $locationId
+            ]);
+            $bagId = (int)$pdo->lastInsertId();
+
+            // Record initial movement
+            $mov = $pdo->prepare("
+                INSERT INTO inventory_movements (
+                    blood_bag_id, from_location_id, to_location_id, movement_type, quantity_ml,
+                    reason, notes, performed_by, movement_date
+                ) VALUES (
+                    :bag_id, NULL, :loc_id, 'RECEIVED', :qty, 'Initial accession', 'Passed laboratory screening', :user_id, NOW()
+                )
+            ");
+            $mov->execute([
+                ':bag_id'  => $bagId,
+                ':loc_id'  => $locationId,
+                ':qty'     => $quantityMl,
+                ':user_id' => $userId
+            ]);
+
+            AuditService::log('CREATE_BAG', 'blood_bags', $bagId, null, ['bag_number' => $bagNumber, 'quantity_ml' => $quantityMl], $userId);
+
+            $pdo->commit();
+            return ['success' => true, 'message' => "Blood bag {$bagNumber} registered and placed into active FEFO inventory."];
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            return ['success' => false, 'message' => 'Failed to create blood bag: ' . $e->getMessage()];
+        }
+    }
+
+    public static function getStorageLocations(): array {
+        $pdo = Database::getConnection();
+        return $pdo->query("SELECT * FROM storage_locations ORDER BY storage_location_id ASC")->fetchAll();
+    }
+}

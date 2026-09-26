@@ -1,6 +1,6 @@
 <?php
 /**
- * BloodLink - CSRF Protection Helper
+ * BloodLink - CSRF Protection Helper. testing github actions.
  */
 
 require_once __DIR__ . '/Session.php';

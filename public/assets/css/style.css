@@ -38,6 +38,7 @@ body {
 
 .navbar-bloodlink .container {
     gap: 1.25rem;
+    position: relative;
 }
 
 .navbar-bloodlink .navbar-collapse {
@@ -48,6 +49,19 @@ body {
     gap: 0.2rem;
 }
 
+.navbar-bloodlink .navbar-nav.navbar-common {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    flex-direction: row;
+    margin: 0 !important;
+    gap: 1rem;
+}
+
+.navbar-bloodlink .nav-item {
+    flex: 0 0 auto;
+}
+
 .navbar-bloodlink .nav-link {
     display: inline-flex;
     align-items: center;
@@ -55,10 +69,17 @@ body {
     padding: 0.55rem 0.72rem !important;
     border-radius: 8px;
     color: #505965;
-    font-size: 0.875rem;
+    font-size: 0.82rem;
     line-height: 1.25;
     white-space: nowrap;
     transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.navbar-bloodlink .navbar-common .nav-link {
+    min-height: 44px;
+    padding: 0.55rem 0.9rem !important;
+    color: #424b57;
+    font-size: 0.9rem;
 }
 
 .navbar-bloodlink .nav-link:hover,
@@ -85,6 +106,12 @@ body {
     justify-content: center;
     border-radius: 8px;
     background-color: #fff1f1;
+}
+
+@media (min-width: 992px) {
+    .navbar-bloodlink .navbar-toggler {
+        display: none;
+    }
 }
 
 .navbar-bloodlink .dropdown-menu {
@@ -145,6 +172,15 @@ body {
         margin-top: 0.75rem;
         padding: 0.65rem 0 0.85rem;
         border-top: 1px solid #eceef1;
+    }
+
+    .navbar-bloodlink .navbar-nav.navbar-common {
+        position: static;
+        transform: none;
+        flex-direction: column;
+        align-items: stretch;
+        margin: 0 0 0.35rem !important;
+        gap: 0.15rem;
     }
 
     .navbar-bloodlink .navbar-nav {

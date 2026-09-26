@@ -24,7 +24,12 @@
                     </div>
                     <div class="col-md-6">
                         <label for="password" class="form-label fw-semibold">Password *</label>
-                        <input type="password" class="form-control" id="password" name="password" minlength="6" required placeholder="Minimum 6 characters">
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="password" name="password" minlength="6" required placeholder="Minimum 6 characters">
+                            <button class="btn btn-outline-secondary" type="button" data-password-toggle aria-controls="password" aria-label="Show password" title="Show password">
+                                <i class="bi bi-eye" aria-hidden="true"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <label for="phone" class="form-label fw-semibold">Contact Phone</label>

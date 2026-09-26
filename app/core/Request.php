@@ -21,6 +21,7 @@ class Request {
         // Strip query string
         $position = strpos($uri, '?');
         if ($position !== false) {
+            
             $uri = substr($uri, 0, $position);
         }
 

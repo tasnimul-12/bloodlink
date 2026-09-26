@@ -38,64 +38,35 @@ if ($currentUser) {
 <body>
 
     <!-- Main Navigation Bar -->
-    <nav class="navbar navbar-expand-lg navbar-bloodlink sticky-top">
+    <nav class="navbar navbar-expand-lg navbar-bloodlink sticky-top" aria-label="Main navigation">
         <div class="container">
             <a class="navbar-brand d-flex align-items-center" href="<?= url('/') ?>">
                 <span class="brand-icon"><i class="bi bi-droplet-fill"></i></span>
                 <span class="brand-text">Blood<span>Link</span></span>
             </a>
             
-            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
             <div class="collapse navbar-collapse" id="navbarContent">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <ul class="navbar-nav navbar-common mx-auto mb-2 mb-lg-0">
                     <li class="nav-item">
-                        <a class="nav-link fw-medium" href="<?= url('/') ?>"><i class="bi bi-house-door me-1"></i> Home</a>
+                        <a class="nav-link fw-medium" href="<?= url('/') ?>">Home</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link fw-medium" href="<?= url('/compatibility') ?>"><i class="bi bi-diagram-3 me-1"></i> Compatibility</a>
+                        <a class="nav-link fw-medium" href="<?= url('/compatibility') ?>">Compatibility</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link fw-medium" href="<?= url('/about') ?>"><i class="bi bi-info-circle me-1"></i> About & Architecture</a>
+                        <a class="nav-link fw-medium" href="<?= url('/about') ?>">About</a>
                     </li>
-
-                    <?php if ($currentRole === 'DONOR'): ?>
-                        <li class="nav-item">
-                            <a class="nav-link fw-semibold text-danger" href="<?= url('/donor/dashboard') ?>"><i class="bi bi-speedometer2 me-1"></i> Donor Portal</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link fw-medium" href="<?= url('/donor/history') ?>"><i class="bi bi-clock-history me-1"></i> My Donations</a>
-                        </li>
-                    <?php elseif ($currentRole === 'HOSPITAL_STAFF'): ?>
-                        <li class="nav-item">
-                            <a class="nav-link fw-semibold text-danger" href="<?= url('/hospital/dashboard') ?>"><i class="bi bi-hospital me-1"></i> Hospital Portal</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link fw-medium" href="<?= url('/hospital/requests') ?>"><i class="bi bi-card-checklist me-1"></i> Blood Requests</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link fw-medium" href="<?= url('/hospital/inventory') ?>"><i class="bi bi-box-seam me-1"></i> Stock Viewer</a>
-                        </li>
-                    <?php elseif ($currentRole === 'ADMIN'): ?>
-                        <li class="nav-item">
-                            <a class="nav-link fw-semibold text-danger" href="<?= url('/admin/dashboard') ?>"><i class="bi bi-shield-check me-1"></i> Admin Portal</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link fw-medium" href="<?= url('/admin/inventory') ?>"><i class="bi bi-boxes me-1"></i> FEFO Inventory</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link fw-medium" href="<?= url('/admin/hospitals') ?>"><i class="bi bi-building-check me-1"></i> Hospitals</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link fw-medium" href="<?= url('/admin/reports') ?>"><i class="bi bi-graph-up me-1"></i> DBMS Reports</a>
-                        </li>
-                    <?php endif; ?>
                 </ul>
+
+                
 
                 <ul class="navbar-nav ms-auto align-items-lg-center">
                     <?php if ($currentUser): ?>
+
                         <!-- Notification Bell -->
                         <li class="nav-item me-lg-2">
                             <?php 
@@ -112,18 +83,28 @@ if ($currentUser) {
                             </a>
                         </li>
 
-                        <!-- User Profile Dropdown -->
+                        
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle d-flex align-items-center fw-semibold" href="#" role="button" data-bs-toggle="dropdown">
-                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle me-2">
-                                    <?= e($currentRole) ?>
-                                </span>
-                                <span><?= e($currentUser['username']) ?></span>
+                            <a class="nav-link dropdown-toggle fw-semibold" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-grid me-1"></i> Menu
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
                                 <li>
                                     <h6 class="dropdown-header text-uppercase small fw-bold">Signed in as <?= e($currentUser['username']) ?></h6>
                                 </li>
+                                <?php if ($currentRole === 'DONOR'): ?>
+                                    <li><a class="dropdown-item" href="<?= url('/donor/dashboard') ?>"><i class="bi bi-speedometer2 me-2"></i> Donor Portal</a></li>
+                                    <li><a class="dropdown-item" href="<?= url('/donor/history') ?>"><i class="bi bi-clock-history me-2"></i> My Donations</a></li>
+                                <?php elseif ($currentRole === 'HOSPITAL_STAFF'): ?>
+                                    <li><a class="dropdown-item" href="<?= url('/hospital/dashboard') ?>"><i class="bi bi-hospital me-2"></i> Hospital Portal</a></li>
+                                    <li><a class="dropdown-item" href="<?= url('/hospital/requests') ?>"><i class="bi bi-card-checklist me-2"></i> Blood Requests</a></li>
+                                    <li><a class="dropdown-item" href="<?= url('/hospital/inventory') ?>"><i class="bi bi-box-seam me-2"></i> Inventory</a></li>
+                                <?php elseif ($currentRole === 'ADMIN'): ?>
+                                    <li><a class="dropdown-item" href="<?= url('/admin/dashboard') ?>"><i class="bi bi-shield-check me-2"></i> Admin Portal</a></li>
+                                    <li><a class="dropdown-item" href="<?= url('/admin/inventory') ?>"><i class="bi bi-boxes me-2"></i> FEFO Inventory</a></li>
+                                    <li><a class="dropdown-item" href="<?= url('/admin/hospitals') ?>"><i class="bi bi-building-check me-2"></i> Hospitals</a></li>
+                                    <li><a class="dropdown-item" href="<?= url('/admin/reports') ?>"><i class="bi bi-graph-up me-2"></i> Reports</a></li>
+                                <?php endif; ?>
                                 <?php if ($currentRole === 'DONOR'): ?>
                                     <li><a class="dropdown-item" href="<?= url('/donor/profile') ?>"><i class="bi bi-person me-2"></i> My Profile</a></li>
                                     <li><a class="dropdown-item" href="<?= url('/donor/history') ?>"><i class="bi bi-clock-history me-2"></i> Donation History</a></li>
@@ -215,5 +196,22 @@ if ($currentUser) {
 
     <!-- Bootstrap 5.3 JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    document.addEventListener('click', function (event) {
+        const toggle = event.target.closest('[data-password-toggle]');
+        if (!toggle) return;
+
+        const passwordInput = document.getElementById(toggle.getAttribute('aria-controls'));
+        const icon = toggle.querySelector('i');
+        if (!passwordInput || !icon) return;
+
+        const showPassword = passwordInput.type === 'password';
+        passwordInput.type = showPassword ? 'text' : 'password';
+        icon.classList.toggle('bi-eye', !showPassword);
+        icon.classList.toggle('bi-eye-slash', showPassword);
+        toggle.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
+        toggle.setAttribute('title', showPassword ? 'Hide password' : 'Show password');
+    });
+    </script>
 </body>
 </html>

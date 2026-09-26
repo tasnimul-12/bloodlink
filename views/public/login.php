@@ -25,6 +25,9 @@
                     <div class="input-group">
                         <span class="input-group-text bg-light"><i class="bi bi-key"></i></span>
                         <input type="password" class="form-control" id="password" name="password" required placeholder="••••••••">
+                        <button class="btn btn-outline-secondary" type="button" data-password-toggle aria-controls="password" aria-label="Show password" title="Show password">
+                            <i class="bi bi-eye" aria-hidden="true"></i>
+                        </button>
                     </div>
                 </div>
 

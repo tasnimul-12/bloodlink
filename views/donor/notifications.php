@@ -1,9 +1,16 @@
+<?php
+$dashboardUrl = match (Session::role()) {
+    'HOSPITAL_STAFF' => url('/hospital/dashboard'),
+    'ADMIN' => url('/admin/dashboard'),
+    default => url('/donor/dashboard'),
+};
+?>
 <div class="row justify-content-center">
     <div class="col-lg-9">
         <div class="card card-bloodlink shadow-sm">
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-bell text-danger me-2"></i> In-System Notification Center</h5>
-                <a href="<?= url('/donor/dashboard') ?>" class="btn btn-sm btn-outline-secondary">Dashboard</a>
+                <a href="<?= $dashboardUrl ?>" class="btn btn-sm btn-outline-secondary">Dashboard</a>
             </div>
             <div class="card-body p-0">
                 <?php if (empty($notifications)): ?>

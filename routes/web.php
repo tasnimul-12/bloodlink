@@ -11,6 +11,7 @@ require_once __DIR__ . '/../app/middleware/RoleMiddleware.php';
 require_once __DIR__ . '/../app/controllers/HomeController.php';
 require_once __DIR__ . '/../app/controllers/AuthController.php';
 require_once __DIR__ . '/../app/controllers/DonorController.php';
+require_once __DIR__ . '/../app/controllers/NotificationsController.php';
 require_once __DIR__ . '/../app/controllers/HospitalController.php';
 require_once __DIR__ . '/../app/controllers/AdminController.php';
 
@@ -41,7 +42,8 @@ function registerRoutes(Router $router): void {
     $router->get('/donor/profile', [DonorController::class, 'profile'], [AuthMiddleware::class, DonorMiddleware::class]);
     $router->post('/donor/profile', [DonorController::class, 'updateProfile'], [AuthMiddleware::class, DonorMiddleware::class]);
     $router->get('/donor/history', [DonorController::class, 'history'], [AuthMiddleware::class, DonorMiddleware::class]);
-    $router->get('/donor/notifications', [DonorController::class, 'notifications'], [AuthMiddleware::class, DonorMiddleware::class]);
+    $router->get('/notifications', [NotificationsController::class, 'index'], [AuthMiddleware::class]);
+    $router->get('/donor/notifications', [NotificationsController::class, 'index'], [AuthMiddleware::class, DonorMiddleware::class]);
     $router->post('/donor/match/respond', [DonorController::class, 'respondMatch'], [AuthMiddleware::class, DonorMiddleware::class]);
 
     // ----------------------------------------------------

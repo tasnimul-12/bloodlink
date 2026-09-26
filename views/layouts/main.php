@@ -69,11 +69,7 @@ if ($currentUser) {
 
                         <!-- Notification Bell -->
                         <li class="nav-item me-lg-2">
-                            <?php 
-                            $notifUrl = ($currentRole === 'DONOR') ? url('/donor/notifications') : 
-                                        (($currentRole === 'HOSPITAL_STAFF') ? url('/hospital/dashboard') : url('/admin/dashboard'));
-                            ?>
-                            <a class="nav-link position-relative px-2" href="<?= $notifUrl ?>" title="Notifications">
+                            <a class="nav-link position-relative px-2" href="<?= url('/notifications') ?>" title="Notifications" aria-label="Notifications">
                                 <i class="bi bi-bell fs-5"></i>
                                 <?php if ($unreadCount > 0): ?>
                                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">

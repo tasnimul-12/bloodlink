@@ -61,10 +61,67 @@ class AdminController extends Controller {
             ORDER BY h.created_at DESC
         ")->fetchAll();
 
+        $staffMembers = $pdo->query("
+            SELECT hs.staff_id, hs.staff_name, hs.designation, hs.staff_status,
+                   h.hospital_name, h.approval_status, u.username, u.email
+            FROM hospital_staff hs
+            JOIN hospitals h ON h.hospital_id = hs.hospital_id
+            JOIN users u ON u.user_id = hs.user_id
+            ORDER BY h.hospital_name, hs.staff_name
+        ")->fetchAll();
+
         $this->render('admin/hospitals', [
             'title' => 'Hospital Verification & Management — BloodLink',
-            'hospitals' => $hospitals
+            'hospitals' => $hospitals,
+            'staffMembers' => $staffMembers
         ]);
+    }
+
+    public function updateStaffStatus(int $id): void {
+        $this->validateCsrf();
+        $user = Session::user();
+        $newStatus = strtoupper($this->request->input('status', ''));
+
+        if (!in_array($newStatus, ['ACTIVE', 'INACTIVE'], true)) {
+            Session::setFlash('danger', 'Invalid staff status specified.');
+            $this->redirect('/admin/hospitals');
+            return;
+        }
+
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare("
+            SELECT hs.staff_name, hs.staff_status, h.hospital_name, h.approval_status
+            FROM hospital_staff hs
+            JOIN hospitals h ON h.hospital_id = hs.hospital_id
+            WHERE hs.staff_id = :id
+        ");
+        $stmt->execute([':id' => $id]);
+        $staff = $stmt->fetch();
+
+        if (!$staff) {
+            Session::setFlash('danger', 'Hospital staff member not found.');
+            $this->redirect('/admin/hospitals');
+            return;
+        }
+        if ($newStatus === 'ACTIVE' && $staff['approval_status'] !== 'APPROVED') {
+            Session::setFlash('warning', 'Approve the hospital before activating its staff accounts.');
+            $this->redirect('/admin/hospitals');
+            return;
+        }
+
+        $update = $pdo->prepare('UPDATE hospital_staff SET staff_status = :status WHERE staff_id = :id');
+        $update->execute([':status' => $newStatus, ':id' => $id]);
+        AuditService::log(
+            'HOSPITAL_STAFF_STATUS_UPDATE',
+            'hospital_staff',
+            $id,
+            ['staff_status' => $staff['staff_status']],
+            ['staff_status' => $newStatus],
+            (int)$user['user_id']
+        );
+
+        Session::setFlash('success', "{$staff['staff_name']} at {$staff['hospital_name']} is now {$newStatus}.");
+        $this->redirect('/admin/hospitals');
     }
 
     public function updateHospitalStatus(int $id): void {

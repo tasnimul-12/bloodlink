@@ -67,6 +67,7 @@ function registerRoutes(Router $router): void {
     $router->get('/admin/dashboard', [AdminController::class, 'dashboard'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->get('/admin/hospitals', [AdminController::class, 'hospitals'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->post('/admin/hospitals/status/{id}', [AdminController::class, 'updateHospitalStatus'], [AuthMiddleware::class, AdminMiddleware::class]);
+    $router->post('/admin/hospital-staff/status/{id}', [AdminController::class, 'updateStaffStatus'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->get('/admin/inventory', [AdminController::class, 'inventory'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->post('/admin/inventory/discard', [AdminController::class, 'discardBag'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->post('/admin/inventory/transfer', [AdminController::class, 'transferBag'], [AuthMiddleware::class, AdminMiddleware::class]);

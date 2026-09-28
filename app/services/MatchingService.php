@@ -11,7 +11,12 @@ class MatchingService {
     /**
      * Finds eligible donors and creates match records & notifications
      */
-    public static function matchDonorsForRequest(int $requestId, int $actorUserId, ?int $donorId = null): array {
+    public static function matchDonorsForRequest(
+        int $requestId,
+        int $actorUserId,
+        ?int $donorId = null,
+        ?int $hospitalIdConstraint = null
+    ): array {
         $pdo = Database::getConnection();
 
         // Get request and hospital details
@@ -26,6 +31,9 @@ class MatchingService {
 
         if (!$request) {
             return ['success' => false, 'message' => 'Request not found.'];
+        }
+        if ($hospitalIdConstraint !== null && (int)$request['hospital_id'] !== $hospitalIdConstraint) {
+            return ['success' => false, 'message' => 'Access denied: Request does not belong to your hospital.'];
         }
         if (!in_array($request['status'], ['PENDING', 'MATCHING', 'PARTIALLY_FULFILLED'], true)) {
             return ['success' => false, 'message' => 'This request is no longer accepting donor matches.'];

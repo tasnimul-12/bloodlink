@@ -26,6 +26,16 @@ INSERT INTO users (user_id, role_id, username, password_hash, email, phone, acco
 (10, 2, 'zero_donor', '$2y$10$kwqvwkTQv5EGthQYCVFMTeHp3Sre2Ew.La.CEKr.PkjnTPfd9k3fK', 'zero@example.com', '01711000015', 'ACTIVE')
 ON DUPLICATE KEY UPDATE account_status = VALUES(account_status);
 
+-- Additional donor accounts for compatibility, eligibility, availability, and
+-- account-status testing. Password for all accounts below: Donor@123
+INSERT INTO users (user_id, role_id, username, password_hash, email, phone, account_status) VALUES
+(101, 2, 'nadia_bnegative', '$2y$10$kwqvwkTQv5EGthQYCVFMTeHp3Sre2Ew.La.CEKr.PkjnTPfd9k3fK', 'nadia@example.com', '01711000016', 'ACTIVE'),
+(102, 2, 'omar_abnegative', '$2y$10$kwqvwkTQv5EGthQYCVFMTeHp3Sre2Ew.La.CEKr.PkjnTPfd9k3fK', 'omar@example.com', '01711000017', 'ACTIVE'),
+(103, 2, 'lima_opositive', '$2y$10$kwqvwkTQv5EGthQYCVFMTeHp3Sre2Ew.La.CEKr.PkjnTPfd9k3fK', 'lima@example.com', '01711000018', 'ACTIVE'),
+(104, 2, 'sakib_unavailable', '$2y$10$kwqvwkTQv5EGthQYCVFMTeHp3Sre2Ew.La.CEKr.PkjnTPfd9k3fK', 'sakib@example.com', '01711000019', 'ACTIVE'),
+(105, 2, 'mita_suspended', '$2y$10$kwqvwkTQv5EGthQYCVFMTeHp3Sre2Ew.La.CEKr.PkjnTPfd9k3fK', 'mita@example.com', '01711000020', 'SUSPENDED')
+ON DUPLICATE KEY UPDATE account_status = VALUES(account_status);
+
 -- ------------------------------------------------------------
 -- 2. HOSPITALS
 -- ------------------------------------------------------------
@@ -58,6 +68,14 @@ INSERT INTO donors (donor_id, user_id, full_name, date_of_birth, gender, blood_g
 (6, 10, 'Farhan Kabir', '2001-09-14', 'MALE', 1, 'Mirpur 10, Section 2', 'Dhaka', 'AVAILABLE', 'ELIGIBLE', NULL, '2024-06-01')
 ON DUPLICATE KEY UPDATE full_name = VALUES(full_name);
 
+INSERT INTO donors (donor_id, user_id, full_name, date_of_birth, gender, blood_group_id, address, city, availability_status, eligibility_status, next_eligible_date, registration_date) VALUES
+(101, 101, 'Nadia Rahman', '1996-02-14', 'FEMALE', 4, 'Road 10, Dhanmondi', 'Dhaka', 'AVAILABLE', 'ELIGIBLE', NULL, '2025-01-10'),
+(102, 102, 'Omar Hasan', '1991-07-19', 'MALE', 6, 'Road 2, Banani', 'Dhaka', 'AVAILABLE', 'ELIGIBLE', NULL, '2025-02-12'),
+(103, 103, 'Lima Akter', '1999-09-02', 'FEMALE', 7, 'House 8, Uttara', 'Dhaka', 'AVAILABLE', 'NOT_ELIGIBLE', DATE_ADD(CURRENT_DATE, INTERVAL 60 DAY), '2025-03-15'),
+(104, 104, 'Sakib Hossain', '1994-12-11', 'MALE', 3, 'GEC Circle', 'Chittagong', 'UNAVAILABLE', 'ELIGIBLE', NULL, '2025-04-20'),
+(105, 105, 'Mita Sultana', '1997-05-25', 'FEMALE', 5, 'Zindabazar', 'Sylhet', 'AVAILABLE', 'ELIGIBLE', NULL, '2025-05-01')
+ON DUPLICATE KEY UPDATE full_name = VALUES(full_name), availability_status = VALUES(availability_status), eligibility_status = VALUES(eligibility_status), next_eligible_date = VALUES(next_eligible_date);
+
 -- ------------------------------------------------------------
 -- 5. STORAGE LOCATIONS
 -- ------------------------------------------------------------
@@ -83,6 +101,14 @@ INSERT INTO donations (donation_id, donor_id, donation_type, donation_date, quan
 (9, 3, 'WHOLE_BLOOD', '2025-01-20 10:15:00', 450.00, 'PASSED', 'COMPLETED', 'Fifth donation, achieved Gold tier'),
 (10, 5, 'WHOLE_BLOOD', '2024-09-01 12:00:00', 450.00, 'PASSED', 'COMPLETED', 'Standard donation')
 ON DUPLICATE KEY UPDATE quantity_ml = VALUES(quantity_ml);
+
+-- Non-successful donation records for admin filtering and validation tests.
+INSERT INTO donations (donation_id, donor_id, donation_type, donation_date, quantity_ml, screening_status, donation_status, notes) VALUES
+(101, 101, 'WHOLE_BLOOD', DATE_SUB(NOW(), INTERVAL 2 DAY), 450.00, 'PENDING', 'SCHEDULED', 'Upcoming appointment'),
+(102, 102, 'PLASMA', DATE_SUB(NOW(), INTERVAL 20 DAY), 250.00, 'FAILED', 'REJECTED', 'Screening criteria not met'),
+(103, 103, 'PLATELET', DATE_SUB(NOW(), INTERVAL 10 DAY), 250.00, 'PASSED', 'CANCELLED', 'Appointment cancelled by donor'),
+(104, 105, 'PLASMA', DATE_SUB(NOW(), INTERVAL 5 DAY), 250.00, 'PASSED', 'COMPLETED', 'Plasma donation for component test')
+ON DUPLICATE KEY UPDATE screening_status = VALUES(screening_status), donation_status = VALUES(donation_status), notes = VALUES(notes);
 
 -- ------------------------------------------------------------
 -- 7. DONOR RECOGNITION
@@ -125,6 +151,14 @@ INSERT INTO blood_bags (blood_bag_id, bag_number, donation_id, blood_group_id, c
 (10, 'BAG-DIS-902', 10, 3, 'WHOLE_BLOOD', DATE_SUB(CURRENT_DATE, INTERVAL 50 DAY), DATE_SUB(CURRENT_DATE, INTERVAL 15 DAY), 450.00, 'DISCARDED', 1)
 ON DUPLICATE KEY UPDATE status = VALUES(status);
 
+-- Additional status and component fixtures: RESERVED, ISSUED, and PLASMA.
+INSERT INTO blood_bags (blood_bag_id, bag_number, donation_id, blood_group_id, component_type, collection_date, expiry_date, quantity_ml, status, storage_location_id) VALUES
+(101, 'BAG-BNEG-601', 101, 4, 'WHOLE_BLOOD', DATE_SUB(CURRENT_DATE, INTERVAL 4 DAY), DATE_ADD(CURRENT_DATE, INTERVAL 26 DAY), 450.00, 'ISSUED', 1),
+(102, 'BAG-ABNEG-602', 102, 6, 'PLASMA', DATE_SUB(CURRENT_DATE, INTERVAL 4 DAY), DATE_ADD(CURRENT_DATE, INTERVAL 340 DAY), 250.00, 'ISSUED', 2),
+(103, 'BAG-ABPOS-603', 104, 5, 'PLASMA', DATE_SUB(CURRENT_DATE, INTERVAL 5 DAY), DATE_ADD(CURRENT_DATE, INTERVAL 340 DAY), 250.00, 'AVAILABLE', 2),
+(104, 'BAG-BNEG-602', 101, 4, 'WHOLE_BLOOD', DATE_SUB(CURRENT_DATE, INTERVAL 4 DAY), DATE_ADD(CURRENT_DATE, INTERVAL 26 DAY), 450.00, 'RESERVED', 1)
+ON DUPLICATE KEY UPDATE status = VALUES(status);
+
 -- ------------------------------------------------------------
 -- 9. INVENTORY MOVEMENTS (Initial Reception)
 -- ------------------------------------------------------------
@@ -141,6 +175,15 @@ INSERT INTO inventory_movements (movement_id, blood_bag_id, from_location_id, to
 (10, 10, 1, NULL, 'DISCARDED', 450.00, 'Clot observed during inspection', 'Unit safely discarded', 1, DATE_SUB(NOW(), INTERVAL 15 DAY))
 ON DUPLICATE KEY UPDATE reason = VALUES(reason);
 
+INSERT INTO inventory_movements (movement_id, blood_bag_id, from_location_id, to_location_id, movement_type, quantity_ml, reason, notes, performed_by, movement_date) VALUES
+(101, 104, 1, 1, 'RESERVED', 450.00, 'Held for emergency request #101', 'Reserved test fixture', 1, DATE_SUB(NOW(), INTERVAL 1 DAY)),
+(102, 102, 2, NULL, 'ISSUED', 250.00, 'Issued for plasma request', 'Issued test fixture', 2, DATE_SUB(NOW(), INTERVAL 1 DAY)),
+(103, 103, 2, 4, 'TRANSFERRED', 250.00, 'Transferred to emergency holding', 'Transfer test fixture', 1, NOW()),
+(104, 101, 1, NULL, 'ISSUED', 450.00, 'Fulfilled request #101', 'Issued partial fulfillment fixture', 2, DATE_SUB(NOW(), INTERVAL 1 DAY))
+ON DUPLICATE KEY UPDATE reason = VALUES(reason), notes = VALUES(notes);
+
+UPDATE blood_bags SET storage_location_id = 4 WHERE blood_bag_id = 103;
+
 -- ------------------------------------------------------------
 -- 10. BLOOD REQUESTS
 -- ------------------------------------------------------------
@@ -151,6 +194,12 @@ INSERT INTO blood_requests (request_id, hospital_id, requested_by, request_type,
 (2, 1, 1, 'ROUTINE', 'MEDIUM', 'FULFILLED', DATE_SUB(CURRENT_DATE, INTERVAL 2 DAY), '14:00:00', 'Elective orthopedic hip replacement', 'Completed successfully', DATE_SUB(NOW(), INTERVAL 3 DAY)),
 -- Request 3: Shortage / Matching request from Evercare Hospital for rare B- Whole Blood (triggers donor sourcing)
 (3, 3, 3, 'SURGERY', 'HIGH', 'MATCHING', DATE_ADD(CURRENT_DATE, INTERVAL 1 DAY), '09:00:00', 'Scheduled pediatric cardiac surgery', 'No B- in central stock; donor matching initiated', NOW())
+ON DUPLICATE KEY UPDATE status = VALUES(status);
+
+INSERT INTO blood_requests (request_id, hospital_id, requested_by, request_type, urgency, status, required_date, required_time, reason, special_notes, request_date) VALUES
+(101, 1, 1, 'EMERGENCY', 'HIGH', 'PARTIALLY_FULFILLED', CURRENT_DATE, '20:00:00', 'Partial stock test request', 'Requires additional compatible units', NOW()),
+(102, 1, 1, 'ROUTINE', 'LOW', 'CANCELLED', DATE_ADD(CURRENT_DATE, INTERVAL 7 DAY), '10:00:00', 'Cancelled elective procedure', 'Cancellation workflow fixture', DATE_SUB(NOW(), INTERVAL 1 DAY)),
+(103, 3, 3, 'OTHER', 'MEDIUM', 'EXPIRED', DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '12:00:00', 'Expired request workflow fixture', 'Required date has passed', DATE_SUB(NOW(), INTERVAL 5 DAY))
 ON DUPLICATE KEY UPDATE status = VALUES(status);
 
 -- ------------------------------------------------------------
@@ -165,6 +214,12 @@ INSERT INTO request_items (request_item_id, request_id, blood_group_id, componen
 (3, 3, 4, 'WHOLE_BLOOD', 450.00, 0.00)
 ON DUPLICATE KEY UPDATE quantity_fulfilled = VALUES(quantity_fulfilled);
 
+INSERT INTO request_items (request_item_id, request_id, blood_group_id, component_type, quantity_requested, quantity_fulfilled) VALUES
+(101, 101, 4, 'WHOLE_BLOOD', 900.00, 450.00),
+(102, 102, 5, 'PLASMA', 250.00, 0.00),
+(103, 103, 7, 'PLATELET', 200.00, 0.00)
+ON DUPLICATE KEY UPDATE quantity_fulfilled = VALUES(quantity_fulfilled);
+
 -- ------------------------------------------------------------
 -- 12. FULFILLMENTS & FULFILLMENT ITEMS (For Request 2)
 -- Note: fulfilled_by uses user_id (1 = Admin or 2 = Staff)
@@ -172,6 +227,18 @@ ON DUPLICATE KEY UPDATE quantity_fulfilled = VALUES(quantity_fulfilled);
 INSERT INTO fulfillments (fulfillment_id, request_id, fulfilled_by, fulfillment_status, issued_at, notes, created_at) VALUES
 (1, 2, 2, 'COMPLETED', DATE_SUB(NOW(), INTERVAL 2 DAY), 'Dispatched via cold-chain courier to Square Hospital', DATE_SUB(NOW(), INTERVAL 2 DAY))
 ON DUPLICATE KEY UPDATE fulfillment_status = VALUES(fulfillment_status);
+
+INSERT INTO fulfillments (fulfillment_id, request_id, fulfilled_by, fulfillment_status, issued_at, notes, created_at) VALUES
+(101, 101, 2, 'COMPLETED', DATE_SUB(NOW(), INTERVAL 1 DAY), 'Partial allocation test fixture', DATE_SUB(NOW(), INTERVAL 1 DAY))
+ON DUPLICATE KEY UPDATE fulfillment_status = VALUES(fulfillment_status);
+
+-- Complete the existing fulfilled request and represent the partial request
+-- with fulfillment items, so reports and detail pages have consistent data.
+UPDATE blood_bags SET status = 'ISSUED' WHERE blood_bag_id = 4;
+INSERT INTO fulfillment_items (fulfillment_item_id, fulfillment_id, request_item_id, blood_bag_id, quantity_issued, issued_at) VALUES
+(1, 1, 2, 4, 450.00, DATE_SUB(NOW(), INTERVAL 2 DAY)),
+(101, 101, 101, 101, 450.00, DATE_SUB(NOW(), INTERVAL 1 DAY))
+ON DUPLICATE KEY UPDATE quantity_issued = VALUES(quantity_issued);
 
 -- ------------------------------------------------------------
 -- 13. DONOR MATCHES & NOTIFICATIONS (For Request 3)

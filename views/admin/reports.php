@@ -3,12 +3,10 @@
     <div class="col-12">
         <div class="card card-bloodlink p-4 border-start border-4 border-danger">
             <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-1 rounded-pill mb-2">
-                <i class="bi bi-mortarboard-fill me-1"></i> Academic DBMS Technical Evaluation
+                <i class="bi bi-graph-up me-1"></i> Operations overview
             </span>
-            <h3 class="fw-bold mb-1">Advanced Relational Queries & Demonstration Reports</h3>
-            <p class="text-muted small mb-0">
-                This page directly showcases required DBMS concepts: <code>LEFT JOIN</code> with <code>HAVING</code> filters, multi-table aggregations (<code>SUM</code>, <code>AVG</code>, <code>COUNT</code>), nested subqueries, and grouping.
-            </p>
+            <h3 class="fw-bold mb-1">BloodLink Reports</h3>
+            <p class="text-muted small mb-0">Review donor engagement, monthly blood distribution, and requests that still need attention.</p>
         </div>
     </div>
 
@@ -18,11 +16,8 @@
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <div>
                     <h5 class="fw-bold mb-1 text-danger">
-                        <i class="bi bi-person-x-fill me-2"></i> Report 1: Donors with Zero Donation History
+                        <i class="bi bi-person-x-fill me-2"></i> Donors with no completed donations
                     </h5>
-                    <small class="text-muted font-monospace">
-                        SQL Concept: <code>LEFT JOIN donations ON donors.donor_id = donations.donor_id GROUP BY donors.donor_id HAVING COUNT(donations.donation_id) = 0</code>
-                    </small>
                 </div>
                 <span class="badge bg-warning text-dark"><?= count($zeroDonors) ?> Zero-History Donor(s)</span>
             </div>
@@ -68,11 +63,8 @@
         <div class="card card-bloodlink shadow-sm">
             <div class="card-header bg-white py-3">
                 <h5 class="fw-bold mb-1 text-primary">
-                    <i class="bi bi-graph-up me-2"></i> Report 2: Monthly Blood Consumption & Demand Metrics
+                    <i class="bi bi-graph-up me-2"></i> Monthly blood distribution
                 </h5>
-                <small class="text-muted font-monospace">
-                    SQL Concept: <code>COUNT(fi.fulfillment_item_id)</code>, <code>SUM(fi.quantity_issued)</code>, <code>AVG(fi.quantity_issued)</code>, <code>GROUP BY issue_month, hospital_name HAVING total_volume_ml > 0</code>
-                </small>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -112,11 +104,8 @@
         <div class="card card-bloodlink shadow-sm">
             <div class="card-header bg-white py-3">
                 <h5 class="fw-bold mb-1 text-warning-emphasis">
-                    <i class="bi bi-funnel-fill text-warning me-2"></i> Report 3: Requests with Unfulfilled Items (Nested Subquery)
+                    <i class="bi bi-funnel-fill text-warning me-2"></i> Requests with outstanding quantities
                 </h5>
-                <small class="text-muted font-monospace">
-                    SQL Concept: <code>WHERE br.request_id IN (SELECT ri.request_id FROM request_items ri WHERE ri.quantity_fulfilled < ri.quantity_requested)</code>
-                </small>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">

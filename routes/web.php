@@ -22,6 +22,7 @@ function registerRoutes(Router $router): void {
     $router->get('/', [HomeController::class, 'index']);
     $router->get('/compatibility', [HomeController::class, 'compatibility']);
     $router->get('/about', [HomeController::class, 'about']);
+    $router->get('/donation-events', [HomeController::class, 'events']);
 
     // Authentication (Guests only)
     $router->get('/login', [AuthController::class, 'login'], [GuestMiddleware::class]);
@@ -56,6 +57,7 @@ function registerRoutes(Router $router): void {
     $router->get('/hospital/requests/view/{id}', [HospitalController::class, 'viewRequest'], [AuthMiddleware::class, HospitalMiddleware::class]);
     $router->post('/hospital/requests/fulfill/{id}', [HospitalController::class, 'fulfillRequest'], [AuthMiddleware::class, HospitalMiddleware::class]);
     $router->post('/hospital/donations/confirm/{id}', [HospitalController::class, 'confirmDonation'], [AuthMiddleware::class, HospitalMiddleware::class]);
+    $router->post('/hospital/donations/cancel/{id}', [HospitalController::class, 'cancelDonation'], [AuthMiddleware::class, HospitalMiddleware::class]);
     $router->post('/hospital/requests/match/{id}', [HospitalController::class, 'matchRequest'], [AuthMiddleware::class, HospitalMiddleware::class]);
     $router->post('/hospital/requests/cancel/{id}', [HospitalController::class, 'cancelRequest'], [AuthMiddleware::class, HospitalMiddleware::class]);
     $router->get('/hospital/inventory', [HospitalController::class, 'inventory'], [AuthMiddleware::class, HospitalMiddleware::class]);
@@ -69,8 +71,15 @@ function registerRoutes(Router $router): void {
     $router->post('/admin/hospitals/status/{id}', [AdminController::class, 'updateHospitalStatus'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->post('/admin/hospital-staff/status/{id}', [AdminController::class, 'updateStaffStatus'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->get('/admin/inventory', [AdminController::class, 'inventory'], [AuthMiddleware::class, AdminMiddleware::class]);
+    $router->post('/admin/inventory/accession', [AdminController::class, 'accessionBloodBag'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->post('/admin/inventory/discard', [AdminController::class, 'discardBag'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->post('/admin/inventory/transfer', [AdminController::class, 'transferBag'], [AuthMiddleware::class, AdminMiddleware::class]);
+    $router->get('/admin/requests', [AdminController::class, 'requests'], [AuthMiddleware::class, AdminMiddleware::class]);
+    $router->post('/admin/requests/create', [AdminController::class, 'createBloodRequest'], [AuthMiddleware::class, AdminMiddleware::class]);
+    $router->post('/admin/requests/match/{id}', [AdminController::class, 'matchAdminRequest'], [AuthMiddleware::class, AdminMiddleware::class]);
+    $router->get('/admin/events', [AdminController::class, 'events'], [AuthMiddleware::class, AdminMiddleware::class]);
+    $router->post('/admin/events/create', [AdminController::class, 'createEvent'], [AuthMiddleware::class, AdminMiddleware::class]);
+    $router->post('/admin/events/cancel/{id}', [AdminController::class, 'cancelEvent'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->get('/admin/donations', [AdminController::class, 'donations'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->get('/admin/donors', [AdminController::class, 'donors'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->get('/admin/audit-logs', [AdminController::class, 'auditLogs'], [AuthMiddleware::class, AdminMiddleware::class]);

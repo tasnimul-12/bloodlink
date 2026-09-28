@@ -186,9 +186,32 @@ class MatchingService {
         $pdo->beginTransaction();
 
         try {
+            if ($response === 'ACCEPT') {
+                $donorLock = $pdo->prepare("SELECT donor_id FROM donors WHERE donor_id = :donor_id FOR UPDATE");
+                $donorLock->execute([':donor_id' => $donorId]);
+                if (!$donorLock->fetchColumn()) {
+                    $pdo->rollBack();
+                    return ['success' => false, 'message' => 'Donor profile not found.'];
+                }
+
+                $activeDonation = $pdo->prepare("
+                    SELECT donation_id
+                    FROM donations
+                    WHERE donor_id = :donor_id AND donation_status = 'SCHEDULED'
+                    LIMIT 1
+                    FOR UPDATE
+                ");
+                $activeDonation->execute([':donor_id' => $donorId]);
+                if ($activeDonation->fetchColumn()) {
+                    $pdo->rollBack();
+                    return ['success' => false, 'message' => 'You already have a donation awaiting hospital confirmation. Please complete that donation before accepting another invitation.'];
+                }
+            }
+
             $stmt = $pdo->prepare("
                 SELECT dm.match_id, dm.match_status, dm.request_item_id,
-                       ri.request_id, ri.component_type, br.hospital_id, br.status AS request_status,
+                      ri.request_id, ri.component_type, ri.quantity_requested, ri.quantity_fulfilled,
+                      br.hospital_id, br.status AS request_status,
                        h.hospital_name, d.full_name, d.user_id AS donor_user_id
                 FROM donor_matches dm
                 JOIN request_items ri ON dm.request_item_id = ri.request_item_id
@@ -223,10 +246,21 @@ class MatchingService {
             $upd->execute([':status' => $newStatus, ':id' => $matchId]);
 
             if ($newStatus === 'ACCEPTED') {
-                $donationType = $match['component_type'] === 'PLASMA'
-                    ? 'PLASMA'
-                    : ($match['component_type'] === 'PLATELET' ? 'PLATELET' : 'WHOLE_BLOOD');
-                $quantityMl = $donationType === 'PLASMA' ? 250 : ($donationType === 'PLATELET' ? 200 : 450);
+                $donationType = $match['component_type'];
+                $standardVolume = match ($donationType) {
+                    'PLASMA' => 250,
+                    'PLATELET' => 200,
+                    default => 450
+                };
+                $remainingRequested = max(
+                    0,
+                    (float)$match['quantity_requested'] - (float)$match['quantity_fulfilled']
+                );
+                if ($remainingRequested <= 0) {
+                    $pdo->rollBack();
+                    return ['success' => false, 'message' => 'This request item has already been fulfilled.'];
+                }
+                $quantityMl = min($standardVolume, $remainingRequested);
 
                 $donationStmt = $pdo->prepare("
                     INSERT INTO donations (

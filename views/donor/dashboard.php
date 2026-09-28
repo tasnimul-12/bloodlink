@@ -36,13 +36,16 @@
                                             <form action="<?= url('/donor/match/respond') ?>" method="POST" class="d-inline-flex flex-wrap justify-content-end gap-2">
                                                 <?= csrf_field() ?>
                                                 <input type="hidden" name="match_id" value="<?= (int)$pm['match_id'] ?>">
-                                                <button type="submit" name="action" value="ACCEPT" class="btn btn-success fw-bold">
+                                                <button type="submit" name="action" value="ACCEPT" class="btn btn-success fw-bold" <?= !empty($hasScheduledDonation) ? 'disabled title="A donation is already awaiting hospital confirmation."' : '' ?>>
                                                     <i class="bi bi-check-lg me-1" aria-hidden="true"></i> I Can Help
                                                 </button>
                                                 <button type="submit" name="action" value="DECLINE" class="btn btn-outline-secondary">
                                                     <i class="bi bi-x-lg me-1" aria-hidden="true"></i> Not Available
                                                 </button>
                                             </form>
+                                            <?php if (!empty($hasScheduledDonation)): ?>
+                                                <div class="small text-muted mt-2">Another donation is awaiting hospital confirmation. You can respond to this invitation after it is resolved.</div>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>

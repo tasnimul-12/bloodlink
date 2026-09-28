@@ -30,6 +30,7 @@ Update `app/config/config.php` before starting the application if your MySQL cre
 	 ```text
 	 database/BloodLink_finalsql.sql
 	 database/migrations/01_fix_fulfillment_user.sql
+	 database/migrations/02_link_donations_to_matches.sql
 	 database/seeds/demo_seed.sql
 	 ```
 
@@ -39,6 +40,7 @@ Update `app/config/config.php` before starting the application if your MySQL cre
 	 mysql -u root -p -e "CREATE DATABASE bloodlink_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 	 mysql -u root -p bloodlink_db < database/BloodLink_finalsql.sql
 	 mysql -u root -p bloodlink_db < database/migrations/01_fix_fulfillment_user.sql
+	 mysql -u root -p bloodlink_db < database/migrations/02_link_donations_to_matches.sql
 	 mysql -u root -p bloodlink_db < database/seeds/demo_seed.sql
 	 ```
 
@@ -60,8 +62,9 @@ These credentials are for local development only. Change or remove seeded accoun
 
 - Public blood-group compatibility information and system overview
 - Donor registration, profile management, donation history, notifications, and match responses
+- Accepted donor matches become scheduled donations for the related hospital to confirm after collection; confirmation updates donor eligibility, recognition, inventory, and FEFO request fulfillment
 - Hospital registration, blood requests, donor matching, request fulfillment, and hospital inventory
-- Administrator dashboards, donor and hospital management, inventory transfers and discards, donation recording, reports, settings, and audit logs
+- Administrator dashboards, donor and hospital management, inventory transfers and discards, read-only donation records, reports, settings, and audit logs
 - CSRF protection, session-based authentication, role-based access control, prepared database statements, FEFO inventory ordering, and expiry exclusion
 
 ## Project Structure
@@ -95,9 +98,10 @@ Run the PHP tests from the repository root after the database has been seeded:
 php tests/test_rbac_and_auth.php
 php tests/test_fefo_expiry.php
 php tests/test_fulfillment_concurrency.php
+php tests/test_donor_confirmation_flow.php
 ```
 
-The tests use the configured database and may create a temporary donor account. Run them against a development database only.
+The tests use the configured database and may change seeded workflow records or create a temporary donor account. Run them against a development database only; reload the demo seed before repeating workflow tests.
 
 ## Configuration Notes
 

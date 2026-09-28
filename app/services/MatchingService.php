@@ -154,59 +154,113 @@ class MatchingService {
 
     public static function respondToMatch(int $matchId, int $donorId, string $response): array {
         $pdo = Database::getConnection();
+        $pdo->beginTransaction();
 
-        $stmt = $pdo->prepare("
-            SELECT dm.match_id, dm.match_status, dm.request_item_id, ri.request_id, br.hospital_id, h.hospital_name, d.full_name
-            FROM donor_matches dm
-            JOIN request_items ri ON dm.request_item_id = ri.request_item_id
-            JOIN blood_requests br ON ri.request_id = br.request_id
-            JOIN hospitals h ON br.hospital_id = h.hospital_id
-            JOIN donors d ON dm.donor_id = d.donor_id
-            WHERE dm.match_id = :match_id AND dm.donor_id = :donor_id
-        ");
-        $stmt->execute([':match_id' => $matchId, ':donor_id' => $donorId]);
-        $match = $stmt->fetch();
-
-        if (!$match) {
-            return ['success' => false, 'message' => 'Matching invitation not found or access denied.'];
-        }
-
-        $newStatus = ($response === 'ACCEPT') ? 'ACCEPTED' : 'DECLINED';
-
-        $upd = $pdo->prepare("
-            UPDATE donor_matches 
-            SET match_status = :status, response_at = NOW() 
-            WHERE match_id = :id
-        ");
-        $upd->execute([':status' => $newStatus, ':id' => $matchId]);
-
-        // Find hospital staff users to notify them of donor response
-        $staffStmt = $pdo->prepare("
-            SELECT hs.user_id 
-            FROM hospital_staff hs
-            WHERE hs.hospital_id = :hosp_id AND hs.staff_status = 'ACTIVE'
-        ");
-        $staffStmt->execute([':hosp_id' => $match['hospital_id']]);
-        $staffUsers = $staffStmt->fetchAll();
-
-        foreach ($staffUsers as $s) {
-            $notif = $pdo->prepare("
-                INSERT INTO notifications (user_id, notification_type, title, message, related_match_id, is_read, created_at)
-                VALUES (:u_id, 'REQUEST_UPDATE', :title, :msg, :match_id, FALSE, NOW())
+        try {
+            $stmt = $pdo->prepare("
+                SELECT dm.match_id, dm.match_status, dm.request_item_id,
+                       ri.request_id, ri.component_type, br.hospital_id, br.status AS request_status,
+                       h.hospital_name, d.full_name, d.user_id AS donor_user_id
+                FROM donor_matches dm
+                JOIN request_items ri ON dm.request_item_id = ri.request_item_id
+                JOIN blood_requests br ON ri.request_id = br.request_id
+                JOIN hospitals h ON br.hospital_id = h.hospital_id
+                JOIN donors d ON dm.donor_id = d.donor_id
+                WHERE dm.match_id = :match_id AND dm.donor_id = :donor_id
+                FOR UPDATE
             ");
-            $notif->execute([
-                ':u_id'     => $s['user_id'],
-                ':title'    => "Donor {$newStatus} Emergency Match (Req #{$match['request_id']})",
-                ':msg'      => "A compatible donor has {$newStatus} the emergency donation request for your hospital.",
-                ':match_id' => $matchId
-            ]);
+            $stmt->execute([':match_id' => $matchId, ':donor_id' => $donorId]);
+            $match = $stmt->fetch();
+
+            if (!$match) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Matching invitation not found or access denied.'];
+            }
+            if ($match['match_status'] !== 'NOTIFIED') {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'This invitation has already been answered or is no longer active.'];
+            }
+            if (!in_array($match['request_status'], ['PENDING', 'MATCHING', 'PARTIALLY_FULFILLED'], true)) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'This hospital request is no longer accepting donor responses.'];
+            }
+
+            $newStatus = ($response === 'ACCEPT') ? 'ACCEPTED' : 'DECLINED';
+            $upd = $pdo->prepare("
+                UPDATE donor_matches
+                SET match_status = :status, response_at = NOW()
+                WHERE match_id = :id
+            ");
+            $upd->execute([':status' => $newStatus, ':id' => $matchId]);
+
+            if ($newStatus === 'ACCEPTED') {
+                $donationType = $match['component_type'] === 'PLASMA'
+                    ? 'PLASMA'
+                    : ($match['component_type'] === 'PLATELET' ? 'PLATELET' : 'WHOLE_BLOOD');
+                $quantityMl = $donationType === 'PLASMA' ? 250 : ($donationType === 'PLATELET' ? 200 : 450);
+
+                $donationStmt = $pdo->prepare("
+                    INSERT INTO donations (
+                        donor_id, donor_match_id, donation_type, donation_date, quantity_ml,
+                        screening_status, donation_status, notes, created_at
+                    ) VALUES (
+                        :donor_id, :match_id, :donation_type, NOW(), :quantity_ml,
+                        'PENDING', 'SCHEDULED', 'Donor accepted; awaiting hospital collection confirmation.', NOW()
+                    )
+                ");
+                $donationStmt->execute([
+                    ':donor_id' => $donorId,
+                    ':match_id' => $matchId,
+                    ':donation_type' => $donationType,
+                    ':quantity_ml' => $quantityMl
+                ]);
+            }
+
+            $staffStmt = $pdo->prepare("
+                SELECT hs.user_id
+                FROM hospital_staff hs
+                WHERE hs.hospital_id = :hosp_id AND hs.staff_status = 'ACTIVE'
+            ");
+            $staffStmt->execute([':hosp_id' => $match['hospital_id']]);
+            $staffUsers = $staffStmt->fetchAll();
+
+            foreach ($staffUsers as $staffUser) {
+                $notif = $pdo->prepare("
+                    INSERT INTO notifications (user_id, notification_type, title, message, related_match_id, is_read, created_at)
+                    VALUES (:user_id, 'REQUEST_UPDATE', :title, :message, :match_id, FALSE, NOW())
+                ");
+                $notif->execute([
+                    ':user_id' => $staffUser['user_id'],
+                    ':title' => "Donor {$newStatus} Emergency Match (Req #{$match['request_id']})",
+                    ':message' => $newStatus === 'ACCEPTED'
+                        ? "{$match['full_name']} accepted the request. Contact the donor and confirm the collection after it is completed."
+                        : "A compatible donor declined the emergency donation request.",
+                    ':match_id' => $matchId
+                ]);
+            }
+
+            AuditService::log(
+                'RESPOND_MATCH',
+                'donor_matches',
+                $matchId,
+                ['status' => 'NOTIFIED'],
+                ['status' => $newStatus],
+                (int)$match['donor_user_id']
+            );
+
+            $pdo->commit();
+            return [
+                'success' => true,
+                'message' => $newStatus === 'ACCEPTED'
+                    ? 'Your willingness to donate was sent to the hospital. The hospital will confirm the donation after collection.'
+                    : 'You declined this emergency donation request.'
+            ];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('Donor match response failed: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Could not submit your response. Please try again.'];
         }
-
-        AuditService::log('RESPOND_MATCH', 'donor_matches', $matchId, ['status' => $match['match_status']], ['status' => $newStatus]);
-
-        return [
-            'success' => true,
-            'message' => "You have {$newStatus} this emergency donation request. Thank you for your support!"
-        ];
     }
 }

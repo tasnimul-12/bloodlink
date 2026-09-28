@@ -178,103 +178,10 @@ class AdminController extends Controller {
             ORDER BY don.donation_date DESC
         ")->fetchAll();
 
-        $donors = $pdo->query("
-            SELECT d.donor_id, d.full_name, bg.group_name, d.city
-            FROM donors d
-            JOIN blood_groups bg ON d.blood_group_id = bg.blood_group_id
-            ORDER BY d.full_name ASC
-        ")->fetchAll();
-
         $this->render('admin/donations', [
             'title' => 'Donation Management — BloodLink',
-            'donations' => $donations,
-            'donors' => $donors
+            'donations' => $donations
         ]);
-    }
-
-    public function recordDonation(): void {
-        $this->validateCsrf();
-        $user = Session::user();
-        $pdo = Database::getConnection();
-
-        $donorId  = (int)$this->request->input('donor_id', 0);
-        $donType  = $this->request->input('donation_type', 'WHOLE_BLOOD');
-        $donDate  = $this->request->input('donation_date', date('Y-m-d H:i:s'));
-        $qtyMl    = (float)$this->request->input('quantity_ml', 450.00);
-        $screen   = $this->request->input('screening_status', 'PASSED');
-        $status   = $this->request->input('donation_status', 'COMPLETED');
-        $notes    = trim($this->request->input('notes', ''));
-
-        if (!$donorId || $qtyMl <= 0) {
-            Session::setFlash('danger', 'Please select a donor and positive quantity in mL.');
-            $this->redirect('/admin/donations');
-            return;
-        }
-
-        $pdo->beginTransaction();
-        try {
-            $stmt = $pdo->prepare("
-                INSERT INTO donations (donor_id, donation_type, donation_date, quantity_ml, screening_status, donation_status, notes, created_at)
-                VALUES (:d_id, :type, :date, :qty, :screen, :status, :notes, NOW())
-            ");
-            $stmt->execute([
-                ':d_id'   => $donorId,
-                ':type'   => $donType,
-                ':date'   => $donDate,
-                ':qty'    => $qtyMl,
-                ':screen' => $screen,
-                ':status' => $status,
-                ':notes'  => $notes
-            ]);
-            $donationId = (int)$pdo->lastInsertId();
-
-            // If donation is COMPLETED and screening PASSED:
-            // 1. Update next_eligible_date = donation_date + 90 days
-            if ($status === 'COMPLETED' && $screen === 'PASSED') {
-                $minInterval = (int)$pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'DONATION_MIN_INTERVAL_DAYS'")->fetchColumn() ?: 90;
-
-                $updDonor = $pdo->prepare("
-                    UPDATE donors 
-                    SET next_eligible_date = DATE_ADD(:don_date, INTERVAL :interval DAY),
-                        eligibility_status = 'NOT_ELIGIBLE'
-                    WHERE donor_id = :id
-                ");
-                $updDonor->execute([
-                    ':don_date' => substr($donDate, 0, 10),
-                    ':interval' => $minInterval,
-                    ':id'       => $donorId
-                ]);
-
-                // 2. Check and Award Recognition Tiers
-                $totalDonations = (int)$pdo->query("
-                    SELECT COUNT(*) FROM donations 
-                    WHERE donor_id = {$donorId} AND donation_status = 'COMPLETED'
-                ")->fetchColumn();
-
-                $tiers = $pdo->query("SELECT * FROM recognition_levels WHERE minimum_donations <= {$totalDonations} ORDER BY minimum_donations DESC")->fetchAll();
-                $awardStmt = $pdo->prepare("
-                    INSERT IGNORE INTO donor_recognition (donor_id, recognition_level_id, achieved_date, notes)
-                    VALUES (:d_id, :tier_id, CURRENT_DATE, :notes)
-                ");
-                foreach ($tiers as $tier) {
-                    $awardStmt->execute([
-                        ':d_id'    => $donorId,
-                        ':tier_id' => $tier['recognition_level_id'],
-                        ':notes'   => "Achieved upon {$totalDonations} completed donations"
-                    ]);
-                }
-            }
-
-            AuditService::log('RECORD_DONATION', 'donations', $donationId, null, ['donor_id' => $donorId, 'status' => $status], $user['user_id']);
-
-            $pdo->commit();
-            Session::setFlash('success', "Donation record #{$donationId} created successfully.");
-            $this->redirect('/admin/donations');
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            Session::setFlash('danger', 'Failed to record donation: ' . $e->getMessage());
-            $this->redirect('/admin/donations');
-        }
     }
 
     public function donors(): void {

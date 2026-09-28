@@ -225,6 +225,55 @@ body {
     border-left: 4px solid var(--primary-red);
 }
 
+.donor-urgent-matches {
+    overflow: hidden;
+    border: 2px solid #d97706;
+    box-shadow: 0 8px 24px rgba(146, 64, 14, 0.14);
+}
+
+.donor-urgent-matches__header {
+    padding: 1rem 1.25rem;
+    color: #713f12;
+    background: linear-gradient(105deg, #fff1c2 0%, #fffaf0 72%, #fff 100%);
+    border-bottom: 1px solid #f2d38a;
+}
+
+.donor-urgent-matches__header h2 {
+    color: #7c2d12;
+}
+
+.donor-urgent-matches__count {
+    padding: 0.55rem 0.75rem;
+    color: #fff;
+    background: #b42318;
+    font-size: 0.85rem;
+}
+
+.donor-urgent-matches .table {
+    --bs-table-hover-bg: #fffaf0;
+}
+
+.donor-urgent-matches .table th,
+.donor-urgent-matches .table td {
+    padding: 0.9rem 1rem;
+}
+
+@media (max-width: 767.98px) {
+    .donor-urgent-matches__header {
+        padding: 1rem;
+    }
+
+    .donor-urgent-matches .table th,
+    .donor-urgent-matches .table td {
+        padding: 0.75rem;
+    }
+
+    .donor-urgent-matches form,
+    .donor-urgent-matches form .btn {
+        width: 100%;
+    }
+}
+
 .kpi-icon {
     width: 48px;
     height: 48px;

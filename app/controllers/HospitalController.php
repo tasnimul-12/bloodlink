@@ -7,6 +7,7 @@ require_once __DIR__ . '/../core/Controller.php';
 require_once __DIR__ . '/../services/InventoryService.php';
 require_once __DIR__ . '/../services/FulfillmentService.php';
 require_once __DIR__ . '/../services/MatchingService.php';
+require_once __DIR__ . '/../services/DonationService.php';
 require_once __DIR__ . '/../services/AuditService.php';
 
 class HospitalController extends Controller {
@@ -70,13 +71,33 @@ class HospitalController extends Controller {
         $notifStmt->execute([':user_id' => $user['user_id']]);
         $notifications = $notifStmt->fetchAll();
 
+                $pendingDonationsStmt = $pdo->prepare("
+                        SELECT don.donation_id, don.donation_type, don.quantity_ml,
+                                     dm.response_at, ri.request_id, d.full_name, d.city,
+                                     bg.group_name AS blood_group
+                        FROM donations don
+                        JOIN donor_matches dm ON dm.match_id = don.donor_match_id
+                        JOIN request_items ri ON ri.request_item_id = dm.request_item_id
+                        JOIN blood_requests br ON br.request_id = ri.request_id
+                        JOIN donors d ON d.donor_id = don.donor_id
+                        JOIN blood_groups bg ON bg.blood_group_id = d.blood_group_id
+                        WHERE br.hospital_id = :hospital_id
+                            AND br.status IN ('PENDING', 'MATCHING', 'PARTIALLY_FULFILLED')
+                            AND dm.match_status = 'ACCEPTED'
+                            AND don.donation_status = 'SCHEDULED'
+                        ORDER BY dm.response_at DESC
+                ");
+                $pendingDonationsStmt->execute([':hospital_id' => $staff['hospital_id']]);
+                $pendingDonations = $pendingDonationsStmt->fetchAll();
+
         $this->render('hospital/dashboard', [
             'title' => 'Hospital Portal — BloodLink',
             'staff' => $staff,
             'stats' => $stats,
             'recentRequests' => $recentRequests,
             'stockSummary' => $stockSummary,
-            'notifications' => $notifications
+            'notifications' => $notifications,
+            'pendingDonations' => $pendingDonations
         ]);
     }
 
@@ -87,7 +108,13 @@ class HospitalController extends Controller {
         $pdo = Database::getConnection();
         $statusFilter = $this->request->input('status', '');
 
-        $sql = "SELECT * FROM blood_requests WHERE hospital_id = :hosp_id";
+        $sql = "SELECT br.*,
+                (SELECT GROUP_CONCAT(DISTINCT bg.group_name ORDER BY bg.blood_group_id SEPARATOR ', ')
+                 FROM request_items ri
+                 JOIN blood_groups bg ON bg.blood_group_id = ri.blood_group_id
+                 WHERE ri.request_id = br.request_id) AS blood_types
+            FROM blood_requests br
+            WHERE br.hospital_id = :hosp_id";
         $params = [':hosp_id' => $staff['hospital_id']];
 
         if ($statusFilter && in_array($statusFilter, ['PENDING', 'MATCHING', 'PARTIALLY_FULFILLED', 'FULFILLED', 'CANCELLED', 'EXPIRED'])) {
@@ -240,7 +267,15 @@ class HospitalController extends Controller {
 
         // Get items
         $itemStmt = $pdo->prepare("
-            SELECT ri.*, bg.group_name
+                        SELECT ri.*, bg.group_name,
+                                     COALESCE((
+                                             SELECT SUM(don.quantity_ml)
+                                             FROM donations don
+                                             JOIN donor_matches dm ON dm.match_id = don.donor_match_id
+                                             WHERE dm.request_item_id = ri.request_item_id
+                                                 AND don.donation_status = 'COMPLETED'
+                                                 AND don.screening_status = 'PASSED'
+                                     ), 0) AS donor_collected
             FROM request_items ri
             JOIN blood_groups bg ON ri.blood_group_id = bg.blood_group_id
             WHERE ri.request_id = :id
@@ -248,14 +283,17 @@ class HospitalController extends Controller {
         $itemStmt->execute([':id' => $id]);
         $items = $itemStmt->fetchAll();
 
-        // Get donor matches (anonymized for privacy)
+         // Get donor matches and contact details for hospital staff
         $matchStmt = $pdo->prepare("
             SELECT dm.match_id, dm.match_score, dm.match_status, dm.notified_at, dm.response_at,
-                   bg.group_name, d.city
+                   bg.group_name, d.city, d.full_name, u.phone,
+                   don.donation_id, don.donation_status, don.donation_type, don.quantity_ml
             FROM donor_matches dm
             JOIN request_items ri ON dm.request_item_id = ri.request_item_id
             JOIN donors d ON dm.donor_id = d.donor_id
+            JOIN users u ON d.user_id = u.user_id
             JOIN blood_groups bg ON d.blood_group_id = bg.blood_group_id
+            LEFT JOIN donations don ON don.donor_match_id = dm.match_id
             WHERE ri.request_id = :id
             ORDER BY dm.match_score DESC
         ");
@@ -304,6 +342,52 @@ class HospitalController extends Controller {
         }
 
         $this->redirect('/hospital/requests/view/' . $id);
+    }
+
+    public function confirmDonation(int $id): void {
+        $this->validateCsrf();
+        $user = Session::user();
+        $staff = $this->getHospitalStaff($user['user_id']);
+
+        if (!$staff || $staff['approval_status'] !== 'APPROVED' || $staff['staff_status'] !== 'ACTIVE') {
+            Session::setFlash('danger', 'Only active staff at an approved hospital can confirm a donation.');
+            $this->redirect('/hospital/dashboard');
+            return;
+        }
+
+        $pdo = Database::getConnection();
+        $requestStmt = $pdo->prepare("
+            SELECT br.request_id
+            FROM donations don
+            JOIN donor_matches dm ON dm.match_id = don.donor_match_id
+            JOIN request_items ri ON ri.request_item_id = dm.request_item_id
+            JOIN blood_requests br ON br.request_id = ri.request_id
+            WHERE don.donation_id = :donation_id AND br.hospital_id = :hospital_id
+            LIMIT 1
+        ");
+        $requestStmt->execute([
+            ':donation_id' => $id,
+            ':hospital_id' => $staff['hospital_id']
+        ]);
+        $requestId = $requestStmt->fetchColumn();
+
+        $result = DonationService::confirmMatchedDonation(
+            $id,
+            (int)$user['user_id'],
+            (int)$staff['hospital_id'],
+            [
+                'donation_type' => $this->request->input('donation_type', ''),
+                'quantity_ml' => $this->request->input('quantity_ml', 0),
+                'donation_date' => $this->request->input('donation_date', '')
+            ]
+        );
+
+        Session::setFlash($result['success'] ? 'success' : 'danger', $result['message']);
+        if ($result['success']) {
+            $this->redirect('/hospital/requests/view/' . $result['request_id']);
+            return;
+        }
+        $this->redirect($requestId ? '/hospital/requests/view/' . (int)$requestId : '/hospital/dashboard');
     }
 
     public function matchRequest(int $id): void {

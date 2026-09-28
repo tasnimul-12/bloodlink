@@ -55,6 +55,7 @@ function registerRoutes(Router $router): void {
     $router->post('/hospital/requests/create', [HospitalController::class, 'doCreateRequest'], [AuthMiddleware::class, HospitalMiddleware::class]);
     $router->get('/hospital/requests/view/{id}', [HospitalController::class, 'viewRequest'], [AuthMiddleware::class, HospitalMiddleware::class]);
     $router->post('/hospital/requests/fulfill/{id}', [HospitalController::class, 'fulfillRequest'], [AuthMiddleware::class, HospitalMiddleware::class]);
+    $router->post('/hospital/donations/confirm/{id}', [HospitalController::class, 'confirmDonation'], [AuthMiddleware::class, HospitalMiddleware::class]);
     $router->post('/hospital/requests/match/{id}', [HospitalController::class, 'matchRequest'], [AuthMiddleware::class, HospitalMiddleware::class]);
     $router->post('/hospital/requests/cancel/{id}', [HospitalController::class, 'cancelRequest'], [AuthMiddleware::class, HospitalMiddleware::class]);
     $router->get('/hospital/inventory', [HospitalController::class, 'inventory'], [AuthMiddleware::class, HospitalMiddleware::class]);
@@ -70,7 +71,6 @@ function registerRoutes(Router $router): void {
     $router->post('/admin/inventory/discard', [AdminController::class, 'discardBag'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->post('/admin/inventory/transfer', [AdminController::class, 'transferBag'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->get('/admin/donations', [AdminController::class, 'donations'], [AuthMiddleware::class, AdminMiddleware::class]);
-    $router->post('/admin/donations/record', [AdminController::class, 'recordDonation'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->get('/admin/donors', [AdminController::class, 'donors'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->get('/admin/audit-logs', [AdminController::class, 'auditLogs'], [AuthMiddleware::class, AdminMiddleware::class]);
     $router->get('/admin/reports', [AdminController::class, 'reports'], [AuthMiddleware::class, AdminMiddleware::class]);

@@ -15,7 +15,7 @@
 
                 <div class="d-flex flex-wrap gap-2">
                     <a href="<?= url('/admin/donations') ?>" class="btn btn-danger btn-sm px-3 py-2 fw-bold">
-                        <i class="bi bi-plus-circle me-1"></i> Record Donation
+                        <i class="bi bi-journal-medical me-1"></i> Donation Records
                     </a>
                     <a href="<?= url('/admin/reports') ?>" class="btn btn-outline-dark btn-sm px-3 py-2 fw-bold">
                         <i class="bi bi-file-earmark-bar-graph me-1"></i> DBMS Reports

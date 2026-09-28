@@ -90,6 +90,7 @@
                                 <th>Component</th>
                                 <th>Requested</th>
                                 <th>Fulfilled</th>
+                                <th>Donor Confirmed</th>
                                 <th>Progress</th>
                             </tr>
                         </thead>
@@ -109,6 +110,9 @@
                                     <td class="fw-bold <?= ($ful >= $req) ? 'text-success' : 'text-danger' ?>">
                                         <?= number_format($ful, 0) ?> mL
                                     </td>
+                                    <td class="fw-semibold text-primary">
+                                        <?= number_format((float)$item['donor_collected'], 0) ?> mL
+                                    </td>
                                     <td style="min-width: 140px;">
                                         <div class="d-flex align-items-center gap-2">
                                             <div class="progress flex-grow-1" style="height: 6px;">
@@ -126,7 +130,7 @@
         </div>
     </div>
 
-    <!-- Emergency Donor Matches (Anonymized) -->
+    <!-- Emergency Donor Matches -->
     <div class="col-lg-5">
         <div class="card card-bloodlink h-100">
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
@@ -142,6 +146,14 @@
                     <div class="list-group list-group-flush">
                         <?php foreach ($matches as $m): ?>
                             <div class="list-group-item p-3">
+                                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2 small">
+                                    <span class="fw-semibold text-dark"><?= e($m['full_name']) ?></span>
+                                    <?php if (!empty($m['phone'])): ?>
+                                        <a href="tel:<?= e($m['phone']) ?>" class="text-decoration-none"><?= e($m['phone']) ?></a>
+                                    <?php else: ?>
+                                        <span class="text-muted">No phone number</span>
+                                    <?php endif; ?>
+                                </div>
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <span class="badge-blood badge-blood-<?= substr($m['group_name'], 0, 1) ?> py-0 px-2"><?= e($m['group_name']) ?></span>
                                     <span class="small text-muted"><i class="bi bi-geo-alt me-1"></i><?= e($m['city']) ?></span>
@@ -153,10 +165,52 @@
                                         <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>ACCEPTED</span>
                                     <?php elseif ($m['match_status'] === 'DECLINED'): ?>
                                         <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>DECLINED</span>
-                                    <?php else: ?>
+                                    <?php elseif ($m['match_status'] === 'CANCELLED'): ?>
+                                        <span class="badge bg-secondary"><i class="bi bi-slash-circle me-1"></i>CANCELLED</span>
+                                    <?php elseif ($m['match_status'] === 'EXPIRED'): ?>
+                                        <span class="badge bg-secondary"><i class="bi bi-hourglass-bottom me-1"></i>EXPIRED</span>
+                                    <?php elseif ($m['match_status'] === 'SUGGESTED'): ?>
+                                        <span class="badge bg-info text-dark"><i class="bi bi-lightbulb me-1"></i>SUGGESTED</span>
+                                    <?php elseif ($m['match_status'] === 'NOTIFIED'): ?>
                                         <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>NOTIFIED</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-light text-dark border"><?= e($m['match_status']) ?></span>
                                     <?php endif; ?>
                                 </div>
+                                <?php if ($m['match_status'] === 'ACCEPTED' && ($m['donation_status'] ?? '') === 'SCHEDULED'): ?>
+                                    <div class="mt-3 p-3 bg-warning-subtle border border-warning-subtle rounded-2">
+                                        <div class="small fw-semibold text-warning-emphasis mb-2">
+                                            Donor accepted. Confirm only after collection and screening are complete.
+                                        </div>
+                                        <form action="<?= url('/hospital/donations/confirm/' . $m['donation_id']) ?>" method="POST" class="row g-2 align-items-end">
+                                            <?= csrf_field() ?>
+                                            <div class="col-sm-5">
+                                                <label class="form-label small mb-1" for="donation-type-<?= (int)$m['donation_id'] ?>">Collected component</label>
+                                                <select class="form-select form-select-sm" id="donation-type-<?= (int)$m['donation_id'] ?>" name="donation_type" required>
+                                                    <option value="WHOLE_BLOOD" <?= $m['donation_type'] === 'WHOLE_BLOOD' ? 'selected' : '' ?>>Whole blood</option>
+                                                    <option value="PLASMA" <?= $m['donation_type'] === 'PLASMA' ? 'selected' : '' ?>>Plasma</option>
+                                                    <option value="PLATELET" <?= $m['donation_type'] === 'PLATELET' ? 'selected' : '' ?>>Platelets</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-sm-3">
+                                                <label class="form-label small mb-1" for="donation-volume-<?= (int)$m['donation_id'] ?>">Collected mL</label>
+                                                <input class="form-control form-control-sm" id="donation-volume-<?= (int)$m['donation_id'] ?>" type="number" name="quantity_ml" min="1" max="1000" step="1" value="<?= (float)$m['quantity_ml'] ?>" required>
+                                            </div>
+                                            <div class="col-sm-4">
+                                                <label class="form-label small mb-1" for="donation-date-<?= (int)$m['donation_id'] ?>">Collection date &amp; time</label>
+                                                <input class="form-control form-control-sm" id="donation-date-<?= (int)$m['donation_id'] ?>" type="datetime-local" name="donation_date" value="<?= date('Y-m-d\\TH:i') ?>" required>
+                                            </div>
+                                            <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                                <small class="text-muted">Confirmation records completed collection with passed screening.</small>
+                                                <button type="submit" class="btn btn-sm btn-success fw-bold" onclick="return confirm('Confirm that this donor completed collection and passed screening?')">
+                                                    <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Confirm completed donation
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                <?php elseif (($m['donation_status'] ?? '') === 'COMPLETED'): ?>
+                                    <div class="small text-success fw-semibold mt-2"><i class="bi bi-check-circle-fill me-1"></i>Donation completed and confirmed</div>
+                                <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     </div>

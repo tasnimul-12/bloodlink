@@ -1,4 +1,59 @@
 <div class="row gy-4 mb-4">
+    <!-- Active Emergency Match Invitations: keep first so donors see urgent calls immediately. -->
+    <?php if (!empty($pendingMatches)): ?>
+        <div class="col-12">
+            <section class="card card-bloodlink donor-urgent-matches" aria-labelledby="urgent-match-heading">
+                <div class="donor-urgent-matches__header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <h2 class="h5 fw-bold mb-1" id="urgent-match-heading">
+                            <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
+                            Urgent: Compatible Emergency Blood Request
+                        </h2>
+                        <p class="mb-0">A hospital needs a compatible donor. Review the request and respond below.</p>
+                    </div>
+                    <span class="badge donor-urgent-matches__count"><?= count($pendingMatches) ?> Active Request(s)</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Hospital</th>
+                                    <th scope="col">Location</th>
+                                    <th scope="col">Needed By</th>
+                                    <th scope="col">Match Reason</th>
+                                    <th scope="col" class="text-end">Your Response</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($pendingMatches as $pm): ?>
+                                    <tr>
+                                        <td class="fw-bold text-dark"><?= e($pm['hospital_name']) ?></td>
+                                        <td><i class="bi bi-geo-alt text-muted me-1" aria-hidden="true"></i><?= e($pm['hospital_city']) ?></td>
+                                        <td><span class="badge bg-danger-subtle text-danger"><?= e($pm['required_date']) ?></span></td>
+                                        <td class="small text-muted" style="max-width: 320px;"><?= e($pm['match_reason']) ?></td>
+                                        <td class="text-end">
+                                            <form action="<?= url('/donor/match/respond') ?>" method="POST" class="d-inline-flex flex-wrap justify-content-end gap-2">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="match_id" value="<?= (int)$pm['match_id'] ?>">
+                                                <button type="submit" name="action" value="ACCEPT" class="btn btn-success fw-bold">
+                                                    <i class="bi bi-check-lg me-1" aria-hidden="true"></i> I Can Help
+                                                </button>
+                                                <button type="submit" name="action" value="DECLINE" class="btn btn-outline-secondary">
+                                                    <i class="bi bi-x-lg me-1" aria-hidden="true"></i> Not Available
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
+    <?php endif; ?>
+
     <!-- Welcome Header & Status Banner -->
     <div class="col-12">
         <div class="card card-bloodlink p-4 border-start border-4 border-danger">
@@ -126,55 +181,6 @@
             </a>
         </div>
     </div>
-
-    <!-- Active Emergency Match Invitations -->
-    <?php if (!empty($pendingMatches)): ?>
-        <div class="col-12">
-            <div class="card card-bloodlink border-warning shadow-sm">
-                <div class="card-header bg-warning-subtle text-warning-emphasis py-3 d-flex justify-content-between align-items-center">
-                    <span class="fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i> Urgent: Compatible Emergency Blood Request</span>
-                    <span class="badge bg-warning text-dark"><?= count($pendingMatches) ?> Active Request(s)</span>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Hospital</th>
-                                    <th>Location</th>
-                                    <th>Needed By</th>
-                                    <th>Match Reason</th>
-                                    <th class="text-end">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($pendingMatches as $pm): ?>
-                                    <tr>
-                                        <td class="fw-bold text-dark"><?= e($pm['hospital_name']) ?></td>
-                                        <td><i class="bi bi-geo-alt text-muted me-1"></i><?= e($pm['hospital_city']) ?></td>
-                                        <td><span class="badge bg-danger-subtle text-danger"><?= e($pm['required_date']) ?></span></td>
-                                        <td class="small text-muted" style="max-width: 320px;"><?= e($pm['match_reason']) ?></td>
-                                        <td class="text-end">
-                                            <form action="<?= url('/donor/match/respond') ?>" method="POST" class="d-inline">
-                                                <?= csrf_field() ?>
-                                                <input type="hidden" name="match_id" value="<?= (int)$pm['match_id'] ?>">
-                                                <button type="submit" name="action" value="ACCEPT" class="btn btn-sm btn-success fw-bold me-1">
-                                                    <i class="bi bi-check-lg"></i> Accept
-                                                </button>
-                                                <button type="submit" name="action" value="DECLINE" class="btn btn-sm btn-outline-secondary">
-                                                    <i class="bi bi-x-lg"></i> Decline
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    <?php endif; ?>
 
     <!-- Recent Donations Log -->
     <div class="col-12">

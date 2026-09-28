@@ -14,7 +14,7 @@
                 </div>
                 <div class="d-flex gap-2">
                     <a href="<?= url('/admin/donations') ?>" class="btn btn-danger btn-sm px-3 py-2 fw-bold">
-                        <i class="bi bi-plus-circle me-1"></i> Accession New Unit
+                        <i class="bi bi-journal-medical me-1"></i> Donation Records
                     </a>
                 </div>
             </div>

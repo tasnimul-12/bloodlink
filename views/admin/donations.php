@@ -9,87 +9,10 @@
                     </span>
                     <h3 class="fw-bold mb-1">Donation Records & Clinical Screening</h3>
                     <div class="text-muted small">
-                        Log completed collections, screening outcomes, and automatic eligibility interval resets.
+                        Review donor-accepted collections confirmed by the responsible hospital staff.
                     </div>
                 </div>
-                <button type="button" class="btn btn-danger btn-sm px-3 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#recordDonationModal">
-                    <i class="bi bi-plus-circle me-1"></i> Record New Donation
-                </button>
             </div>
-        </div>
-    </div>
-
-    <!-- Record Donation Modal -->
-    <div class="modal fade" id="recordDonationModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <form action="<?= url('/admin/donations/record') ?>" method="POST" class="modal-content">
-                <?= csrf_field() ?>
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title fw-bold"><i class="bi bi-heart-pulse me-2"></i> Record New Blood Donation</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body p-4">
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Select Registered Donor *</label>
-                            <select class="form-select" name="donor_id" required>
-                                <option value="">-- Choose Donor --</option>
-                                <?php foreach ($donors as $d): ?>
-                                    <option value="<?= (int)$d['donor_id'] ?>">
-                                        <?= e($d['full_name']) ?> (<?= e($d['group_name']) ?>, <?= e($d['city']) ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Donation Type *</label>
-                            <select class="form-select" name="donation_type" required>
-                                <option value="WHOLE_BLOOD">WHOLE_BLOOD (Standard ~450 mL)</option>
-                                <option value="PLASMA">PLASMA (Apheresis ~250 mL)</option>
-                                <option value="PLATELET">PLATELET (Apheresis ~200 mL)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Date & Time of Collection *</label>
-                            <input type="datetime-local" class="form-control" name="donation_date" required value="<?= date('Y-m-d\TH:i') ?>">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Quantity Collected (mL) *</label>
-                            <input type="number" step="10" class="form-control" name="quantity_ml" required value="450">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Infectious Disease Screening *</label>
-                            <select class="form-select" name="screening_status" required>
-                                <option value="PASSED" selected>PASSED (HIV, HBV, HCV, Syphilis Non-Reactive)</option>
-                                <option value="PENDING">PENDING (Laboratory Testing in Progress)</option>
-                                <option value="FAILED">FAILED (Reactive / Discard Candidate)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Donation Status *</label>
-                            <select class="form-select" name="donation_status" required>
-                                <option value="COMPLETED" selected>COMPLETED (Collection Successful)</option>
-                                <option value="SCHEDULED">SCHEDULED</option>
-                                <option value="CANCELLED">CANCELLED</option>
-                                <option value="REJECTED">REJECTED</option>
-                            </select>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label fw-semibold">Clinical / Phlebotomy Notes</label>
-                            <input type="text" class="form-control" name="notes" placeholder="e.g. Uncomplicated donation, donor tolerated procedure well.">
-                        </div>
-                    </div>
-
-                    <div class="alert alert-light border small text-muted mb-0">
-                        <i class="bi bi-info-circle text-primary me-1"></i>
-                        <strong>DBMS Automation:</strong> When a donation is marked <code>COMPLETED</code> and <code>PASSED</code>, the system automatically advances the donor's <code>next_eligible_date</code> by the configured safety interval (90 days) and evaluates recognition tier upgrades.
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger fw-bold px-4">Record & Accession</button>
-                </div>
-            </form>
         </div>
     </div>
 

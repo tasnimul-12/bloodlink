@@ -220,6 +220,58 @@ class FulfillmentService {
             $updReq = $pdo->prepare("UPDATE blood_requests SET status = :status WHERE request_id = :id");
             $updReq->execute([':status' => $newReqStatus, ':id' => $requestId]);
 
+            if ($newReqStatus === 'FULFILLED') {
+                $openMatchesStmt = $pdo->prepare("
+                    SELECT dm.match_id, dm.match_status, d.user_id,
+                           don.donation_id, don.donation_status
+                    FROM donor_matches dm
+                    JOIN request_items ri ON ri.request_item_id = dm.request_item_id
+                    JOIN donors d ON d.donor_id = dm.donor_id
+                    LEFT JOIN donations don ON don.donor_match_id = dm.match_id
+                    WHERE ri.request_id = :request_id
+                      AND (
+                          dm.match_status IN ('NOTIFIED', 'SUGGESTED')
+                          OR (dm.match_status = 'ACCEPTED'
+                              AND (don.donation_id IS NULL OR don.donation_status = 'SCHEDULED'))
+                      )
+                    FOR UPDATE
+                ");
+                $openMatchesStmt->execute([':request_id' => $requestId]);
+                $openMatches = $openMatchesStmt->fetchAll();
+
+                $cancelMatchStmt = $pdo->prepare("
+                    UPDATE donor_matches
+                    SET match_status = 'CANCELLED', response_at = NOW()
+                    WHERE match_id = :match_id
+                ");
+                $cancelDonationStmt = $pdo->prepare("
+                    UPDATE donations
+                    SET donation_status = 'CANCELLED',
+                        notes = CONCAT(COALESCE(notes, ''), '\nRequest fulfilled before collection.')
+                    WHERE donation_id = :donation_id AND donation_status = 'SCHEDULED'
+                ");
+                $notifyDonorStmt = $pdo->prepare("
+                    INSERT INTO notifications (
+                        user_id, notification_type, title, message, related_match_id, is_read, created_at
+                    ) VALUES (
+                        :user_id, 'REQUEST_UPDATE', :title, :message, :match_id, FALSE, NOW()
+                    )
+                ");
+
+                foreach ($openMatches as $openMatch) {
+                    $cancelMatchStmt->execute([':match_id' => $openMatch['match_id']]);
+                    if ($openMatch['donation_id']) {
+                        $cancelDonationStmt->execute([':donation_id' => $openMatch['donation_id']]);
+                    }
+                    $notifyDonorStmt->execute([
+                        ':user_id' => $openMatch['user_id'],
+                        ':title' => "Request #{$requestId} fulfilled",
+                        ':message' => 'The hospital has fulfilled this request. No further donation is needed.',
+                        ':match_id' => $openMatch['match_id']
+                    ]);
+                }
+            }
+
             // 8. Audit Log
             AuditService::log(
                 'FULFILL_REQUEST',

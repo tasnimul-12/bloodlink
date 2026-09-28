@@ -46,6 +46,43 @@
         </div>
     <?php endif; ?>
 
+    <?php if (!empty($pendingDonations)): ?>
+        <div class="col-12">
+            <section class="card card-bloodlink border-warning shadow-sm" aria-labelledby="pending-donations-heading">
+                <div class="card-header bg-warning-subtle py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h5 class="fw-bold mb-0 text-warning-emphasis" id="pending-donations-heading">
+                        <i class="bi bi-clipboard2-pulse me-2" aria-hidden="true"></i>Donor Responses Awaiting Confirmation
+                    </h5>
+                    <span class="badge bg-warning text-dark"><?= count($pendingDonations) ?> Awaiting</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">Donor</th>
+                                <th scope="col">Blood Group</th>
+                                <th scope="col">Request</th>
+                                <th scope="col">Accepted At</th>
+                                <th scope="col" class="text-end">Next Step</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($pendingDonations as $pendingDonation): ?>
+                                <tr>
+                                    <td class="fw-semibold"><?= e($pendingDonation['full_name']) ?></td>
+                                    <td><span class="badge-blood badge-blood-<?= substr($pendingDonation['blood_group'], 0, 1) ?>"><?= e($pendingDonation['blood_group']) ?></span></td>
+                                    <td><a href="<?= url('/hospital/requests/view/' . $pendingDonation['request_id']) ?>">#REQ-<?= (int)$pendingDonation['request_id'] ?></a></td>
+                                    <td><?= e($pendingDonation['response_at']) ?></td>
+                                    <td class="text-end"><a href="<?= url('/hospital/requests/view/' . $pendingDonation['request_id']) ?>" class="btn btn-sm btn-warning fw-semibold">Review response</a></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    <?php endif; ?>
+
     <!-- KPI Request Metrics -->
     <div class="col-md-3 col-6">
         <div class="card card-bloodlink p-3">

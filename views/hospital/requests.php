@@ -27,6 +27,7 @@
                     <tr>
                         <th>Req ID</th>
                         <th>Type</th>
+                        <th>Blood Type</th>
                         <th>Urgency</th>
                         <th>Required Schedule</th>
                         <th>Reason</th>
@@ -37,12 +38,13 @@
                 </thead>
                 <tbody>
                     <?php if (empty($requests)): ?>
-                        <tr><td colspan="8" class="text-center py-5 text-muted">No blood requests found matching criteria.</td></tr>
+                        <tr><td colspan="9" class="text-center py-5 text-muted">No blood requests found matching criteria.</td></tr>
                     <?php else: ?>
                         <?php foreach ($requests as $r): ?>
                             <tr>
                                 <td><code>#REQ-<?= $r['request_id'] ?></code></td>
                                 <td class="fw-semibold text-dark"><?= e($r['request_type']) ?></td>
+                                <td class="fw-semibold"><?= e($r['blood_types'] ?? '—') ?></td>
                                 <td>
                                     <?php if ($r['urgency'] === 'CRITICAL'): ?>
                                         <span class="badge bg-danger">Critical</span>

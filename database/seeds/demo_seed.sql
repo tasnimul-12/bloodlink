@@ -26,6 +26,12 @@ INSERT INTO users (user_id, role_id, username, password_hash, email, phone, acco
 (10, 2, 'zero_donor', '$2y$10$kwqvwkTQv5EGthQYCVFMTeHp3Sre2Ew.La.CEKr.PkjnTPfd9k3fK', 'zero@example.com', '01711000015', 'ACTIVE')
 ON DUPLICATE KEY UPDATE account_status = VALUES(account_status);
 
+INSERT INTO users (user_id, role_id, username, password_hash, email, phone, account_status) VALUES
+(106, 3, 'pending_staff', '$2y$10$2agKZ/.EYnaznCwvohnV1.MwPy6q1rl1zBLRQi0PF8fUSuxcFw.nq', 'pending.staff@chittagonggeneral.example', '01711000106', 'ACTIVE'),
+(107, 3, 'rejected_staff', '$2y$10$2agKZ/.EYnaznCwvohnV1.MwPy6q1rl1zBLRQi0PF8fUSuxcFw.nq', 'rejected.staff@northbengal.example', '01711000107', 'ACTIVE'),
+(108, 3, 'inactive_staff', '$2y$10$2agKZ/.EYnaznCwvohnV1.MwPy6q1rl1zBLRQi0PF8fUSuxcFw.nq', 'inactive.staff@squarehospital.com', '01711000108', 'ACTIVE')
+ON DUPLICATE KEY UPDATE account_status = VALUES(account_status);
+
 -- Additional donor accounts for compatibility, eligibility, availability, and
 -- account-status testing. Password for all accounts below: Donor@123
 INSERT INTO users (user_id, role_id, username, password_hash, email, phone, account_status) VALUES
@@ -41,9 +47,14 @@ ON DUPLICATE KEY UPDATE account_status = VALUES(account_status);
 -- ------------------------------------------------------------
 INSERT INTO hospitals (hospital_id, hospital_name, registration_number, address, city, contact_person, email, phone, approval_status, approved_by, approved_at) VALUES
 (1, 'Square Hospital Ltd.', 'REG-HOSP-001', '18/F Bir Uttam Qazi Nuruzzaman Sarak, West Panthapath', 'Dhaka', 'Dr. Arman Hossain', 'info@squarehospital.com', '02-8144400', 'APPROVED', 1, NOW()),
-(2, 'Dhaka Medical College Hospital', 'REG-HOSP-002', 'Secretariat Road, Ramna', 'Dhaka', 'Dr. Shamima Nasrin', 'info@dmch.gov.bd', '02-55165088', 'PENDING', NULL, NULL),
+(2, 'Dhaka Medical College Hospital', 'REG-HOSP-002', 'Secretariat Road, Ramna', 'Dhaka', 'Dr. Shamima Nasrin', 'info@dmch.gov.bd', '02-55165088', 'APPROVED', 1, NOW()),
 (3, 'Evercare Hospital Dhaka', 'REG-HOSP-003', 'Plot 81, Block E, Bashundhara R/A', 'Dhaka', 'Dr. Tariq Rahman', 'info@evercarebd.com', '09666710678', 'APPROVED', 1, NOW())
 ON DUPLICATE KEY UPDATE hospital_name = VALUES(hospital_name);
+
+INSERT INTO hospitals (hospital_id, hospital_name, registration_number, address, city, contact_person, email, phone, approval_status, approved_by, approved_at) VALUES
+(4, 'Chittagong General Hospital', 'REG-HOSP-004', 'Anderkilla, Kotwali', 'Chittagong', 'Dr. Farida Akter', 'info@chittagonggeneral.example', '031-610000', 'PENDING', NULL, NULL),
+(5, 'North Bengal Medical Centre', 'REG-HOSP-005', 'Medical Road, Rajshahi', 'Rajshahi', 'Dr. Mahmud Karim', 'info@northbengal.example', '0721-700000', 'REJECTED', 1, NOW())
+ON DUPLICATE KEY UPDATE hospital_name = VALUES(hospital_name), approval_status = VALUES(approval_status), approved_by = VALUES(approved_by), approved_at = VALUES(approved_at);
 
 -- ------------------------------------------------------------
 -- 3. HOSPITAL STAFF
@@ -53,6 +64,12 @@ INSERT INTO hospital_staff (staff_id, hospital_id, user_id, staff_name, designat
 (2, 2, 3, 'Dr. Shamima Nasrin', 'Emergency Ward Incharge', 'ACTIVE', '2025-02-15'),
 (3, 3, 4, 'Dr. Tariq Rahman', 'Transfusion Specialist', 'ACTIVE', '2025-03-01')
 ON DUPLICATE KEY UPDATE staff_name = VALUES(staff_name);
+
+INSERT INTO hospital_staff (staff_id, hospital_id, user_id, staff_name, designation, staff_status, joined_at) VALUES
+(4, 4, 106, 'Dr. Farida Akter', 'Emergency Medical Officer', 'ACTIVE', '2025-04-01'),
+(5, 5, 107, 'Dr. Mahmud Karim', 'Blood Bank Officer', 'ACTIVE', '2025-05-01'),
+(6, 1, 108, 'Dr. Retired Staff', 'Former Medical Officer', 'INACTIVE', '2024-01-01')
+ON DUPLICATE KEY UPDATE staff_name = VALUES(staff_name), staff_status = VALUES(staff_status);
 
 -- ------------------------------------------------------------
 -- 4. DONORS
@@ -199,7 +216,8 @@ ON DUPLICATE KEY UPDATE status = VALUES(status);
 INSERT INTO blood_requests (request_id, hospital_id, requested_by, request_type, urgency, status, required_date, required_time, reason, special_notes, request_date) VALUES
 (101, 1, 1, 'EMERGENCY', 'HIGH', 'PARTIALLY_FULFILLED', CURRENT_DATE, '20:00:00', 'Partial stock test request', 'Requires additional compatible units', NOW()),
 (102, 1, 1, 'ROUTINE', 'LOW', 'CANCELLED', DATE_ADD(CURRENT_DATE, INTERVAL 7 DAY), '10:00:00', 'Cancelled elective procedure', 'Cancellation workflow fixture', DATE_SUB(NOW(), INTERVAL 1 DAY)),
-(103, 3, 3, 'OTHER', 'MEDIUM', 'EXPIRED', DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '12:00:00', 'Expired request workflow fixture', 'Required date has passed', DATE_SUB(NOW(), INTERVAL 5 DAY))
+(103, 3, 3, 'OTHER', 'MEDIUM', 'EXPIRED', DATE_SUB(CURRENT_DATE, INTERVAL 3 DAY), '12:00:00', 'Expired request workflow fixture', 'Required date has passed', DATE_SUB(NOW(), INTERVAL 5 DAY)),
+(104, 2, 2, 'EMERGENCY', 'CRITICAL', 'PENDING', CURRENT_DATE, '23:00:00', 'DMCH fulfillment test request', 'Use this request while signed in as dmc_staff', NOW())
 ON DUPLICATE KEY UPDATE status = VALUES(status);
 
 -- ------------------------------------------------------------
@@ -217,7 +235,8 @@ ON DUPLICATE KEY UPDATE quantity_fulfilled = VALUES(quantity_fulfilled);
 INSERT INTO request_items (request_item_id, request_id, blood_group_id, component_type, quantity_requested, quantity_fulfilled) VALUES
 (101, 101, 4, 'WHOLE_BLOOD', 900.00, 450.00),
 (102, 102, 5, 'PLASMA', 250.00, 0.00),
-(103, 103, 7, 'PLATELET', 200.00, 0.00)
+(103, 103, 7, 'PLATELET', 200.00, 0.00),
+(104, 104, 5, 'PLASMA', 250.00, 0.00)
 ON DUPLICATE KEY UPDATE quantity_fulfilled = VALUES(quantity_fulfilled);
 
 -- ------------------------------------------------------------
@@ -248,10 +267,40 @@ INSERT INTO donor_matches (match_id, request_item_id, donor_id, match_score, mat
 (1, 3, 2, 95.00, 'Universal donor (O-), eligible, available in Dhaka', 'NOTIFIED', NOW(), NULL, NOW())
 ON DUPLICATE KEY UPDATE match_status = VALUES(match_status);
 
+INSERT INTO donor_matches (match_id, request_item_id, donor_id, match_score, match_reason, match_status, notified_at, response_at, created_at) VALUES
+(101, 3, 101, 100.00, 'Eligible B- donor for B- emergency request', 'ACCEPTED', DATE_SUB(NOW(), INTERVAL 2 DAY), DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_SUB(NOW(), INTERVAL 2 DAY)),
+(102, 1, 6, 100.00, 'Eligible A+ donor for A+ emergency request', 'DECLINED', DATE_SUB(NOW(), INTERVAL 3 DAY), DATE_SUB(NOW(), INTERVAL 2 DAY), DATE_SUB(NOW(), INTERVAL 3 DAY)),
+(103, 1, 1, 100.00, 'A+ donor response window expired', 'EXPIRED', DATE_SUB(NOW(), INTERVAL 8 DAY), NULL, DATE_SUB(NOW(), INTERVAL 8 DAY)),
+(104, 3, 7, 100.00, 'Eligible B- donor invitation cancelled', 'CANCELLED', DATE_SUB(NOW(), INTERVAL 5 DAY), NULL, DATE_SUB(NOW(), INTERVAL 5 DAY)),
+(105, 1, 2, 85.00, 'Eligible O- universal donor suggestion for A+ request', 'SUGGESTED', NULL, NULL, DATE_SUB(NOW(), INTERVAL 1 DAY))
+ON DUPLICATE KEY UPDATE match_status = VALUES(match_status), response_at = VALUES(response_at);
+
+-- Nadia accepted request #3; Evercare staff must confirm actual collection.
+INSERT INTO donations (
+	donation_id, donor_id, donor_match_id, donation_type, donation_date,
+	quantity_ml, screening_status, donation_status, notes, created_at
+) VALUES (
+	105, 101, 101, 'WHOLE_BLOOD', NOW(), 450.00, 'PENDING', 'SCHEDULED',
+	'Donor accepted; awaiting hospital collection confirmation.', NOW()
+)
+ON DUPLICATE KEY UPDATE
+	donor_match_id = VALUES(donor_match_id),
+	screening_status = VALUES(screening_status),
+	donation_status = VALUES(donation_status),
+	notes = VALUES(notes);
+
 INSERT INTO notifications (notification_id, user_id, notification_type, title, message, related_match_id, is_read, created_at) VALUES
 (1, 6, 'URGENT_MATCH', 'Urgent Emergency Blood Request in Dhaka', 'An urgent request for compatible blood has been posted by Evercare Hospital. Your blood type O- is compatible. Can you donate?', 1, FALSE, NOW()),
 (2, 2, 'REQUEST_UPDATE', 'Request #2 Fulfilled', 'Your blood request for 450 mL O- Whole Blood has been completely fulfilled.', NULL, TRUE, DATE_SUB(NOW(), INTERVAL 2 DAY))
 ON DUPLICATE KEY UPDATE title = VALUES(title);
+
+INSERT INTO notifications (notification_id, user_id, notification_type, title, message, related_match_id, is_read, created_at) VALUES
+(101, 101, 'REQUEST_UPDATE', 'Donor accepted emergency match', 'A donor accepted the B- emergency request.', 101, TRUE, DATE_SUB(NOW(), INTERVAL 1 DAY)),
+(102, 10, 'REQUEST_UPDATE', 'Donor declined emergency match', 'The donor declined the A+ emergency request.', 102, TRUE, DATE_SUB(NOW(), INTERVAL 2 DAY)),
+(103, 5, 'URGENT_MATCH', 'Emergency match response expired', 'The response period for the A+ request has ended.', 103, TRUE, DATE_SUB(NOW(), INTERVAL 7 DAY)),
+(104, 101, 'REQUEST_UPDATE', 'Emergency match cancelled', 'The B- emergency match invitation was cancelled.', 104, TRUE, DATE_SUB(NOW(), INTERVAL 5 DAY)),
+(105, 6, 'URGENT_MATCH', 'Suggested compatible blood request', 'A compatible A+ request is available for review.', 105, FALSE, DATE_SUB(NOW(), INTERVAL 1 DAY))
+ON DUPLICATE KEY UPDATE title = VALUES(title), message = VALUES(message), related_match_id = VALUES(related_match_id);
 
 -- ------------------------------------------------------------
 -- 14. AUDIT LOGS

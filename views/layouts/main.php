@@ -60,6 +60,9 @@ if ($currentUser) {
                     <li class="nav-item">
                         <a class="nav-link fw-medium" href="<?= url('/about') ?>">About</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link fw-medium" href="<?= url('/donation-events') ?>">Donation Events</a>
+                    </li>
                 </ul>
 
                 
@@ -98,6 +101,8 @@ if ($currentUser) {
                                 <?php elseif ($currentRole === 'ADMIN'): ?>
                                     <li><a class="dropdown-item" href="<?= url('/admin/dashboard') ?>"><i class="bi bi-shield-check me-2"></i> Admin Portal</a></li>
                                     <li><a class="dropdown-item" href="<?= url('/admin/inventory') ?>"><i class="bi bi-boxes me-2"></i> FEFO Inventory</a></li>
+                                    <li><a class="dropdown-item" href="<?= url('/admin/requests') ?>"><i class="bi bi-clipboard2-pulse me-2"></i> Hospital Blood Requests</a></li>
+                                    <li><a class="dropdown-item" href="<?= url('/admin/events') ?>"><i class="bi bi-calendar-heart me-2"></i> Donation Events</a></li>
                                     <li><a class="dropdown-item" href="<?= url('/admin/hospitals') ?>"><i class="bi bi-building-check me-2"></i> Hospitals</a></li>
                                     <li><a class="dropdown-item" href="<?= url('/admin/reports') ?>"><i class="bi bi-graph-up me-2"></i> Reports</a></li>
                                 <?php endif; ?>
@@ -166,13 +171,8 @@ if ($currentUser) {
                         <span class="brand-text fs-5">Blood<span>Link</span></span>
                     </div>
                     <p class="small text-muted mb-0">
-                        Academic DBMS University Project • Centralized Blood Bank & Emergency Blood Coordination System.
+                        Blood donation, request coordination, and blood bank inventory in one place.
                     </p>
-                    <div class="mt-2">
-                        <span class="badge bg-secondary-subtle text-secondary border me-1">3NF Normalized Schema</span>
-                        <span class="badge bg-secondary-subtle text-secondary border me-1">20 Relational Tables</span>
-                        <span class="badge bg-secondary-subtle text-secondary border me-1">ACID Concurrency & FEFO</span>
-                    </div>
                 </div>
                 <div class="col-md-6 text-center text-md-end small">
                     <ul class="list-inline mb-2">
@@ -180,11 +180,11 @@ if ($currentUser) {
                         <li class="list-inline-item">•</li>
                         <li class="list-inline-item"><a href="<?= url('/compatibility') ?>" class="text-decoration-none text-muted">Blood Compatibility</a></li>
                         <li class="list-inline-item">•</li>
-                        <li class="list-inline-item"><a href="<?= url('/about') ?>" class="text-decoration-none text-muted">Architecture</a></li>
+                        <li class="list-inline-item"><a href="<?= url('/about') ?>" class="text-decoration-none text-muted">About BloodLink</a></li>
                         <li class="list-inline-item">•</li>
                         <li class="list-inline-item"><a href="<?= url('/login') ?>" class="text-decoration-none text-muted">Portal Login</a></li>
                     </ul>
-                    <p class="text-muted mb-0">Designed & Built for University DBMS Project Presentation & Viva.</p>
+                    <p class="text-muted mb-0">Connecting donors and hospitals to help keep essential blood available.</p>
                 </div>
             </div>
         </div>

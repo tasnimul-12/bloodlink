@@ -8,6 +8,103 @@ require_once __DIR__ . '/AuditService.php';
 require_once __DIR__ . '/FulfillmentService.php';
 
 class DonationService {
+    public static function cancelMatchedDonation(int $donationId, int $staffUserId, int $hospitalId): array {
+        $pdo = Database::getConnection();
+        $pdo->beginTransaction();
+
+        try {
+            $donorIdStmt = $pdo->prepare('SELECT donor_id FROM donations WHERE donation_id = :donation_id');
+            $donorIdStmt->execute([':donation_id' => $donationId]);
+            $donorId = $donorIdStmt->fetchColumn();
+            if (!$donorId) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Matched donation record was not found.'];
+            }
+
+            $donorLock = $pdo->prepare('SELECT donor_id FROM donors WHERE donor_id = :donor_id FOR UPDATE');
+            $donorLock->execute([':donor_id' => $donorId]);
+
+            $stmt = $pdo->prepare("
+                SELECT don.donation_id, don.donor_id, don.donor_match_id, don.donation_status,
+                       dm.match_status, ri.request_id, br.hospital_id, br.status AS request_status,
+                       d.user_id AS donor_user_id, d.full_name
+                FROM donations don
+                JOIN donor_matches dm ON dm.match_id = don.donor_match_id
+                JOIN request_items ri ON ri.request_item_id = dm.request_item_id
+                JOIN blood_requests br ON br.request_id = ri.request_id
+                JOIN donors d ON d.donor_id = don.donor_id
+                WHERE don.donation_id = :donation_id
+                FOR UPDATE
+            ");
+            $stmt->execute([':donation_id' => $donationId]);
+            $donation = $stmt->fetch();
+
+            if (!$donation) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Matched donation record was not found.'];
+            }
+            if ((int)$donation['hospital_id'] !== $hospitalId) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'You can only cancel donations for your own hospital.'];
+            }
+            if ($donation['donation_status'] !== 'SCHEDULED' || $donation['match_status'] !== 'ACCEPTED') {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Only a scheduled donation accepted by the donor can be cancelled.'];
+            }
+            if (!in_array($donation['request_status'], ['PENDING', 'MATCHING', 'PARTIALLY_FULFILLED'], true)) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'The associated request is closed; this donation cannot be cancelled here.'];
+            }
+
+            $cancelDonation = $pdo->prepare("
+                UPDATE donations
+                SET donation_status = 'CANCELLED',
+                    notes = CONCAT(COALESCE(notes, ''), '\nCancelled by hospital staff before collection.')
+                WHERE donation_id = :donation_id AND donation_status = 'SCHEDULED'
+            ");
+            $cancelDonation->execute([':donation_id' => $donationId]);
+
+            $cancelMatch = $pdo->prepare("
+                UPDATE donor_matches
+                SET match_status = 'CANCELLED', response_at = NOW()
+                WHERE match_id = :match_id AND match_status = 'ACCEPTED'
+            ");
+            $cancelMatch->execute([':match_id' => $donation['donor_match_id']]);
+
+            $notifyDonor = $pdo->prepare("
+                INSERT INTO notifications (user_id, notification_type, title, message, related_match_id, is_read, created_at)
+                VALUES (:user_id, 'REQUEST_UPDATE', 'Donation cancelled', :message, :match_id, FALSE, NOW())
+            ");
+            $notifyDonor->execute([
+                ':user_id' => $donation['donor_user_id'],
+                ':message' => "Your scheduled donation for request #{$donation['request_id']} was cancelled by the hospital before collection. You may respond to other active invitations.",
+                ':match_id' => $donation['donor_match_id']
+            ]);
+
+            AuditService::log(
+                'CANCEL_SCHEDULED_DONATION',
+                'donations',
+                $donationId,
+                ['donation_status' => 'SCHEDULED', 'match_status' => 'ACCEPTED'],
+                ['donation_status' => 'CANCELLED', 'match_status' => 'CANCELLED'],
+                $staffUserId
+            );
+
+            $pdo->commit();
+            return [
+                'success' => true,
+                'request_id' => (int)$donation['request_id'],
+                'message' => "Scheduled donation for {$donation['full_name']} was cancelled."
+            ];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('Matched donation cancellation failed: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Could not cancel this donation. No changes were saved.'];
+        }
+    }
+
     public static function confirmMatchedDonation(
         int $donationId,
         int $staffUserId,
@@ -19,7 +116,7 @@ class DonationService {
         $dateInput = trim($data['donation_date'] ?? '');
         $donationTimestamp = strtotime($dateInput);
 
-        if (!in_array($donationType, ['WHOLE_BLOOD', 'PLASMA', 'PLATELET'], true)) {
+        if (!in_array($donationType, ['WHOLE_BLOOD', 'RBC', 'PLASMA', 'PLATELET'], true)) {
             return ['success' => false, 'message' => 'Select a valid collected blood component.'];
         }
         if ($quantityMl <= 0 || $quantityMl > 1000) {
@@ -33,6 +130,17 @@ class DonationService {
         $pdo->beginTransaction();
 
         try {
+            $donorIdStmt = $pdo->prepare('SELECT donor_id FROM donations WHERE donation_id = :donation_id');
+            $donorIdStmt->execute([':donation_id' => $donationId]);
+            $donorId = $donorIdStmt->fetchColumn();
+            if (!$donorId) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Matched donation record was not found.'];
+            }
+
+            $donorLock = $pdo->prepare('SELECT donor_id FROM donors WHERE donor_id = :donor_id FOR UPDATE');
+            $donorLock->execute([':donor_id' => $donorId]);
+
             $stmt = $pdo->prepare("
                 SELECT don.donation_id, don.donor_id, don.donor_match_id, don.donation_status,
                       dm.match_status, ri.request_id, br.hospital_id, br.status AS request_status,
@@ -64,6 +172,10 @@ class DonationService {
             if (!in_array($donation['request_status'], ['PENDING', 'MATCHING', 'PARTIALLY_FULFILLED'], true)) {
                 $pdo->rollBack();
                 return ['success' => false, 'message' => 'The associated request is closed; this donation cannot be confirmed.'];
+            }
+            if ($donationType !== $donation['requested_component']) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'The collected component must match the component accepted for this request.'];
             }
 
             $donationDate = date('Y-m-d H:i:s', $donationTimestamp);
@@ -124,11 +236,13 @@ class DonationService {
 
             $storageTypeByDonation = [
                 'WHOLE_BLOOD' => 'REFRIGERATOR',
+                'RBC' => 'REFRIGERATOR',
                 'PLASMA' => 'FREEZER',
                 'PLATELET' => 'PLATELET_AGITATOR'
             ];
             $shelfLifeDays = [
                 'WHOLE_BLOOD' => 35,
+                'RBC' => 35,
                 'PLASMA' => 365,
                 'PLATELET' => 5
             ];
@@ -185,6 +299,79 @@ class DonationService {
                 ':notes' => "Accessioned from completed donation #{$donationId}.",
                 ':user_id' => $staffUserId
             ]);
+
+            $siblingMatchesStmt = $pdo->prepare("
+                SELECT dm.match_id, dm.match_status, ri.request_id, br.hospital_id,
+                       don.donation_id
+                FROM donor_matches dm
+                JOIN request_items ri ON ri.request_item_id = dm.request_item_id
+                JOIN blood_requests br ON br.request_id = ri.request_id
+                LEFT JOIN donations don ON don.donor_match_id = dm.match_id
+                WHERE dm.donor_id = :donor_id
+                  AND dm.match_id <> :current_match_id
+                  AND (
+                      dm.match_status IN ('NOTIFIED', 'SUGGESTED')
+                      OR (dm.match_status = 'ACCEPTED'
+                          AND (don.donation_id IS NULL OR don.donation_status = 'SCHEDULED'))
+                  )
+                FOR UPDATE
+            ");
+            $siblingMatchesStmt->execute([
+                ':donor_id' => $donation['donor_id'],
+                ':current_match_id' => $donation['donor_match_id']
+            ]);
+            $siblingMatches = $siblingMatchesStmt->fetchAll();
+
+            $cancelDonation = $pdo->prepare("
+                UPDATE donations
+                SET donation_status = 'CANCELLED',
+                    notes = CONCAT(COALESCE(notes, ''), '\nCancelled because another donation was confirmed.')
+                WHERE donation_id = :donation_id AND donation_status = 'SCHEDULED'
+            ");
+            $cancelMatch = $pdo->prepare("
+                UPDATE donor_matches
+                SET match_status = 'CANCELLED', response_at = COALESCE(response_at, NOW())
+                WHERE match_id = :match_id AND match_status IN ('NOTIFIED', 'SUGGESTED', 'ACCEPTED')
+            ");
+            $closeDonorNotice = $pdo->prepare("
+                UPDATE notifications
+                SET notification_type = 'REQUEST_UPDATE',
+                    title = :title,
+                    message = :message,
+                    is_read = FALSE,
+                    read_at = NULL
+                WHERE user_id = :user_id
+                  AND related_match_id = :match_id
+                  AND notification_type = 'URGENT_MATCH'
+            ");
+            $addDonorNotice = $pdo->prepare("
+                INSERT INTO notifications (user_id, notification_type, title, message, related_match_id, is_read, created_at)
+                VALUES (:user_id, 'REQUEST_UPDATE', :title, :message, :match_id, FALSE, NOW())
+            ");
+
+            foreach ($siblingMatches as $sibling) {
+                if ($sibling['donation_id']) {
+                    $cancelDonation->execute([':donation_id' => $sibling['donation_id']]);
+                }
+                $cancelMatch->execute([':match_id' => $sibling['match_id']]);
+
+                $noticeTitle = 'Donation invitation closed';
+                $noticeMessage = "Your invitation for request #{$sibling['request_id']} was closed because another donation was confirmed.";
+                $closeDonorNotice->execute([
+                    ':title' => $noticeTitle,
+                    ':message' => $noticeMessage,
+                    ':user_id' => $donation['donor_user_id'],
+                    ':match_id' => $sibling['match_id']
+                ]);
+                if ($closeDonorNotice->rowCount() === 0) {
+                    $addDonorNotice->execute([
+                        ':user_id' => $donation['donor_user_id'],
+                        ':title' => $noticeTitle,
+                        ':message' => $noticeMessage,
+                        ':match_id' => $sibling['match_id']
+                    ]);
+                }
+            }
 
             AuditService::log(
                 'ACCESSION_DONATION_BAG',

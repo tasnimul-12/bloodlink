@@ -64,6 +64,8 @@ All donor passwords are `Donor@123`. Account status is included because suspende
 Get-Content database/BloodLink_finalsql.sql | & 'C:\xampp\mysql\bin\mysql.exe' -u root
 Get-Content database/migrations/01_fix_fulfillment_user.sql | & 'C:\xampp\mysql\bin\mysql.exe' -u root bloodlink_db
 Get-Content database/migrations/02_link_donations_to_matches.sql | & 'C:\xampp\mysql\bin\mysql.exe' -u root bloodlink_db
+Get-Content database/migrations/03_add_rbc_donation_type.sql | & 'C:\xampp\mysql\bin\mysql.exe' -u root bloodlink_db
+Get-Content database/migrations/04_create_donation_events.sql | & 'C:\xampp\mysql\bin\mysql.exe' -u root bloodlink_db
 Get-Content database/seeds/demo_seed.sql | & 'C:\xampp\mysql\bin\mysql.exe' -u root bloodlink_db
 ```
 

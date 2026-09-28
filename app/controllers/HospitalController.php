@@ -440,6 +440,44 @@ class HospitalController extends Controller {
         $this->redirect($requestId ? '/hospital/requests/view/' . (int)$requestId : '/hospital/dashboard');
     }
 
+    public function cancelDonation(int $id): void {
+        $this->validateCsrf();
+        $user = Session::user();
+        $staff = $this->getHospitalStaff($user['user_id']);
+
+        if (!$staff || $staff['approval_status'] !== 'APPROVED' || $staff['staff_status'] !== 'ACTIVE') {
+            Session::setFlash('danger', 'Only active staff at an approved hospital can cancel a donation.');
+            $this->redirect('/hospital/dashboard');
+            return;
+        }
+
+        $result = DonationService::cancelMatchedDonation(
+            $id,
+            (int)$user['user_id'],
+            (int)$staff['hospital_id']
+        );
+
+        if (!$result['success']) {
+            Session::setFlash('danger', $result['message']);
+            $this->redirect('/hospital/requests');
+            return;
+        }
+
+        $matching = MatchingService::matchDonorsForRequest(
+            $result['request_id'],
+            (int)$user['user_id'],
+            null,
+            (int)$staff['hospital_id']
+        );
+        $message = $result['message'];
+        if ($matching['success'] && $matching['notified_count'] > 0) {
+            $message .= " {$matching['notified_count']} other compatible donor(s) have been notified.";
+        }
+
+        Session::setFlash('success', $message);
+        $this->redirect('/hospital/requests/view/' . $result['request_id']);
+    }
+
     public function matchRequest(int $id): void {
         $this->validateCsrf();
         $user = Session::user();

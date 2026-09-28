@@ -40,7 +40,23 @@ class HomeController extends Controller {
 
     public function about(): void {
         $this->render('public/about', [
-            'title' => 'About BloodLink — University DBMS Project'
+            'title' => 'About BloodLink — Donor & Hospital Coordination'
+        ]);
+    }
+
+    public function events(): void {
+        $pdo = Database::getConnection();
+        $events = $pdo->query("
+            SELECT event_id, title, invitation, description, event_date,
+                   venue, address, city, contact_info, event_status
+            FROM donation_events
+            WHERE event_date >= NOW()
+            ORDER BY event_date ASC
+        ")->fetchAll();
+
+        $this->render('public/events', [
+            'title' => 'Blood Donation Events — BloodLink',
+            'events' => $events
         ]);
     }
 }

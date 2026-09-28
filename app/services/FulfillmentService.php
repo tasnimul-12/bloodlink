@@ -111,15 +111,19 @@ class FulfillmentService {
 
                     if ($itemFulfilledNow < $remainingNeeded) {
                         $bagQty = (float)$bag['quantity_ml'];
+                        $issueQuantity = min($bagQty, $remainingNeeded - $itemFulfilledNow);
+                        $remainingBagQuantity = max(0, round($bagQty - $issueQuantity, 2));
                         $bagsToUpdate[] = (int)$bag['blood_bag_id'];
-                        $itemFulfilledNow += $bagQty;
+                        $itemFulfilledNow += $issueQuantity;
                         $totalBagsAllocated++;
 
                         $fulfillmentItemsToInsert[] = [
                             'request_item_id' => $item['request_item_id'],
                             'blood_bag_id'    => (int)$bag['blood_bag_id'],
-                            'quantity_issued' => $bagQty,
-                            'storage_loc_id'  => (int)$bag['storage_location_id']
+                            'quantity_issued' => $issueQuantity,
+                            'remaining_quantity' => $remainingBagQuantity,
+                            'bag_status' => $remainingBagQuantity > 0 ? 'AVAILABLE' : 'ISSUED',
+                            'storage_loc_id' => (int)$bag['storage_location_id']
                         ];
 
                         if ($itemFulfilledNow >= $remainingNeeded) {
@@ -130,7 +134,10 @@ class FulfillmentService {
 
                 // Update item's fulfilled quantity
                 if ($itemFulfilledNow > 0) {
-                    $newFulfilled = (float)$item['quantity_fulfilled'] + $itemFulfilledNow;
+                    $newFulfilled = min(
+                        (float)$item['quantity_requested'],
+                        (float)$item['quantity_fulfilled'] + $itemFulfilledNow
+                    );
                     $updItem = $pdo->prepare("
                         UPDATE request_items 
                         SET quantity_fulfilled = :qty 
@@ -171,7 +178,8 @@ class FulfillmentService {
 
             $bagStatusStmt = $pdo->prepare("
                 UPDATE blood_bags 
-                SET status = 'ISSUED' 
+                SET quantity_ml = :remaining_quantity,
+                    status = :status
                 WHERE blood_bag_id = :bag_id
             ");
 
@@ -192,14 +200,20 @@ class FulfillmentService {
                     ':qty'     => $fItem['quantity_issued']
                 ]);
 
-                $bagStatusStmt->execute([':bag_id' => $fItem['blood_bag_id']]);
+                $bagStatusStmt->execute([
+                    ':remaining_quantity' => $fItem['remaining_quantity'],
+                    ':status' => $fItem['bag_status'],
+                    ':bag_id' => $fItem['blood_bag_id']
+                ]);
 
                 $movStmt->execute([
                     ':bag_id'   => $fItem['blood_bag_id'],
                     ':from_loc' => $fItem['storage_loc_id'],
                     ':qty'      => $fItem['quantity_issued'],
                     ':reason'   => "Fulfillment of Request #{$requestId}",
-                    ':notes'    => "Fulfillment #{$fulfillmentId} dispatched to {$request['hospital_name']}",
+                    ':notes'    => $fItem['remaining_quantity'] > 0
+                        ? "Fulfillment #{$fulfillmentId} dispatched to {$request['hospital_name']}; remaining quantity stays available."
+                        : "Fulfillment #{$fulfillmentId} dispatched to {$request['hospital_name']}",
                     ':user_id'  => $actorUserId
                 ]);
             }

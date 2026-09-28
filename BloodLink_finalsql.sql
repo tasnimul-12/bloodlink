@@ -155,7 +155,7 @@ CREATE TABLE hospital_staff (
 CREATE TABLE donations (
     donation_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     donor_id INT UNSIGNED NOT NULL,
-    donation_type ENUM('WHOLE_BLOOD','PLASMA','PLATELET') NOT NULL,
+    donation_type ENUM('WHOLE_BLOOD','RBC','PLASMA','PLATELET') NOT NULL,
     donation_date DATETIME NOT NULL,
     quantity_ml DECIMAL(7,2) NOT NULL,
     screening_status ENUM('PENDING','PASSED','FAILED')

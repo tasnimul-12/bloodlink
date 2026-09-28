@@ -34,6 +34,31 @@ $badRes = AuthService::authenticate('admin', 'WrongPass@999');
 assert($badRes['success'] === false, "Invalid password was unexpectedly accepted!");
 echo "  [OK] Invalid password correctly rejected\n";
 
+$staffRegistrationData = [
+    'username' => 'test_staff_' . time(),
+    'email' => 'test_staff_' . time() . '@example.com',
+    'password' => 'TestStaff@123',
+    'staff_name' => 'Test Hospital Staff',
+    'designation' => 'Test Officer',
+    'hospital_id' => 1
+];
+$staffRegistration = AuthService::registerHospitalStaff($staffRegistrationData);
+assert($staffRegistration['success'] === true, 'Hospital staff registration failed: ' . ($staffRegistration['message'] ?? ''));
+$staffStatusStmt = Database::getConnection()->prepare('SELECT hs.staff_status, u.user_id FROM hospital_staff hs JOIN users u ON u.user_id = hs.user_id WHERE u.username = :username');
+$staffStatusStmt->execute([':username' => $staffRegistrationData['username']]);
+$registeredStaff = $staffStatusStmt->fetch();
+assert($registeredStaff && $registeredStaff['staff_status'] === 'INACTIVE', 'New hospital staff must remain inactive until administrator approval.');
+$inactiveStaffLogin = AuthService::authenticate($staffRegistrationData['username'], $staffRegistrationData['password']);
+assert($inactiveStaffLogin['success'] === false, 'Unapproved hospital staff must not be able to sign in.');
+echo "  [OK] New hospital staff remains inactive until administrator approval\n";
+
+$crossHospitalMatch = MatchingService::matchDonorsForRequest(3, 1, null, 1);
+assert(
+    !$crossHospitalMatch['success'] && str_contains($crossHospitalMatch['message'], 'does not belong'),
+    'Hospital staff must not trigger matching for another hospital request.'
+);
+echo "  [OK] Cross-hospital donor matching is rejected\n";
+
 // 5. Test Registering a new Donor
 $newDonorData = [
     'username'        => 'test_donor_' . time(),

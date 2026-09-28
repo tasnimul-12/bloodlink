@@ -3,9 +3,10 @@
  * BloodLink - Front Controller & Application Entry Point
  */
 
-// Error reporting for development
+// Keep diagnostics in server logs; never expose exceptions to visitors.
 error_reporting(E_ALL);
-ini_set('display_errors', '1');
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
 
 require_once __DIR__ . '/../app/config/config.php';
 require_once __DIR__ . '/../app/config/database.php';
@@ -39,10 +40,7 @@ try {
             </div>
             <div class="card-body">
                 <h5 class="card-title text-danger">An unexpected error occurred</h5>
-                <p class="card-text text-muted"><?= htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') ?></p>
-                <div class="bg-dark text-light p-3 rounded font-monospace small" style="overflow-x:auto;">
-                    <?= nl2br(htmlspecialchars($e->getFile() . ':' . $e->getLine() . "\n\n" . $e->getTraceAsString(), ENT_QUOTES, 'UTF-8')) ?>
-                </div>
+                <p class="card-text text-muted">Please try again later. The issue has been logged for investigation.</p>
                 <div class="mt-3 text-end">
                     <a href="javascript:history.back()" class="btn btn-outline-secondary">Go Back</a>
                     <a href="<?= APP_ROOT_URL ?>/" class="btn btn-primary">Return to Home</a>

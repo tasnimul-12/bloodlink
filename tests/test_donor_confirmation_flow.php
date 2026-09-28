@@ -24,9 +24,59 @@ $pendingDonation = $donationStmt->fetch();
 assert($pendingDonation && $pendingDonation['donation_status'] === 'SCHEDULED', 'Acceptance did not create a scheduled donation.');
 assert($pendingDonation['screening_status'] === 'PENDING', 'New donation should await screening.');
 
+$siblingMatchId = 105;
+$pdo->prepare("UPDATE donor_matches SET match_status = 'NOTIFIED', response_at = NULL WHERE match_id = :match_id")
+    ->execute([':match_id' => $siblingMatchId]);
+$secondAcceptance = MatchingService::respondToMatch($siblingMatchId, $donorId, 'ACCEPT');
+assert($secondAcceptance['success'] === false, 'A donor with a scheduled donation must not accept another invitation.');
+
+$pdo->prepare("UPDATE donor_matches SET match_status = 'ACCEPTED', response_at = NOW() WHERE match_id = :match_id")
+    ->execute([':match_id' => $siblingMatchId]);
+$siblingInsert = $pdo->prepare("
+    INSERT INTO donations (
+        donor_id, donor_match_id, donation_type, donation_date, quantity_ml,
+        screening_status, donation_status, notes, created_at
+    ) VALUES (
+        :donor_id, :match_id, 'WHOLE_BLOOD', NOW(), 450,
+        'PENDING', 'SCHEDULED', 'Legacy duplicate acceptance test fixture.', NOW()
+    )
+");
+$siblingInsert->execute([':donor_id' => $donorId, ':match_id' => $siblingMatchId]);
+$siblingDonationId = (int)$pdo->lastInsertId();
+
 $staffNotificationStmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = :user_id AND related_match_id = :match_id AND notification_type = 'REQUEST_UPDATE'");
 $staffNotificationStmt->execute([':user_id' => $staffUserId, ':match_id' => $matchId]);
 assert((int)$staffNotificationStmt->fetchColumn() > 0, 'The related hospital staff must be notified after donor acceptance.');
+
+$cancelMatchStmt = $pdo->prepare("
+    INSERT INTO donor_matches (
+        request_item_id, donor_id, match_score, match_reason, match_status, notified_at, response_at, created_at
+    ) VALUES (101, :donor_id, 90, 'Cancellation workflow test fixture.', 'ACCEPTED', NOW(), NOW(), NOW())
+");
+$cancelMatchStmt->execute([':donor_id' => $donorId]);
+$cancelMatchId = (int)$pdo->lastInsertId();
+$cancelDonationStmt = $pdo->prepare("
+    INSERT INTO donations (
+        donor_id, donor_match_id, donation_type, donation_date, quantity_ml,
+        screening_status, donation_status, notes, created_at
+    ) VALUES (
+        :donor_id, :match_id, 'WHOLE_BLOOD', NOW(), 450,
+        'PENDING', 'SCHEDULED', 'Cancellation workflow test fixture.', NOW()
+    )
+");
+$cancelDonationStmt->execute([':donor_id' => $donorId, ':match_id' => $cancelMatchId]);
+$cancelDonationId = (int)$pdo->lastInsertId();
+$cancelResult = DonationService::cancelMatchedDonation($cancelDonationId, $staffUserId, 1);
+assert($cancelResult['success'] === true, 'Authorized hospital staff must be able to cancel a scheduled donation.');
+$cancelledDonationStmt = $pdo->prepare('SELECT donation_status FROM donations WHERE donation_id = :id');
+$cancelledDonationStmt->execute([':id' => $cancelDonationId]);
+assert($cancelledDonationStmt->fetchColumn() === 'CANCELLED', 'Cancelled donation must no longer be scheduled.');
+$cancelledMatchStmt = $pdo->prepare('SELECT match_status FROM donor_matches WHERE match_id = :id');
+$cancelledMatchStmt->execute([':id' => $cancelMatchId]);
+assert($cancelledMatchStmt->fetchColumn() === 'CANCELLED', 'Cancelling a donation must close its donor match.');
+$cancelNoticeStmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = (SELECT user_id FROM donors WHERE donor_id = :donor_id) AND related_match_id = :match_id AND title = 'Donation cancelled'");
+$cancelNoticeStmt->execute([':donor_id' => $donorId, ':match_id' => $cancelMatchId]);
+assert((int)$cancelNoticeStmt->fetchColumn() > 0, 'The donor must be notified when staff cancels a scheduled donation.');
 
 $confirmationData = [
     'donation_type' => 'WHOLE_BLOOD',
@@ -54,6 +104,13 @@ $confirmedStmt->execute([':id' => $pendingDonation['donation_id']]);
 $confirmedDonation = $confirmedStmt->fetch();
 assert($confirmedDonation['donation_status'] === 'COMPLETED', 'Confirmed donation must be completed.');
 assert($confirmedDonation['screening_status'] === 'PASSED', 'Confirmed donation must record passed screening.');
+
+$siblingStatusStmt = $pdo->prepare('SELECT donation_status FROM donations WHERE donation_id = :id');
+$siblingStatusStmt->execute([':id' => $siblingDonationId]);
+assert($siblingStatusStmt->fetchColumn() === 'CANCELLED', 'Confirming one donation must cancel the donor\'s other scheduled donation.');
+$siblingMatchStmt = $pdo->prepare('SELECT match_status FROM donor_matches WHERE match_id = :id');
+$siblingMatchStmt->execute([':id' => $siblingMatchId]);
+assert($siblingMatchStmt->fetchColumn() === 'CANCELLED', 'Confirming one donation must close the donor\'s other active invitations.');
 
 $bagStmt = $pdo->prepare("SELECT COUNT(*) FROM blood_bags WHERE donation_id = :donation_id AND status IN ('AVAILABLE', 'ISSUED')");
 $bagStmt->execute([':donation_id' => $pendingDonation['donation_id']]);

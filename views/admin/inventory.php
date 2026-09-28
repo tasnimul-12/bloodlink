@@ -21,6 +21,87 @@
         </div>
     </div>
 
+    <div class="col-12">
+        <div class="card card-bloodlink p-4 border-start border-4 border-success">
+            <div class="d-flex align-items-start gap-3 mb-3">
+                <div class="kpi-icon bg-success-subtle text-success flex-shrink-0"><i class="bi bi-box-arrow-in-down"></i></div>
+                <div>
+                    <h5 class="fw-bold mb-1">Accession a tested blood bag</h5>
+                    <p class="text-muted small mb-0">Record a completed collection only after screening has passed. The donor's registered blood group is used, and the expiry date is calculated automatically.</p>
+                </div>
+            </div>
+            <form action="<?= url('/admin/inventory/accession') ?>" method="POST">
+                <?= csrf_field() ?>
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-6 col-xl-4">
+                        <label class="form-label fw-semibold" for="accession_donor">Donor *</label>
+                        <select class="form-select" id="accession_donor" name="donor_id" required>
+                            <option value="">Select donor</option>
+                            <?php foreach ($donors as $donor): ?>
+                                <option value="<?= (int)$donor['donor_id'] ?>"><?= e($donor['full_name']) ?> · <?= e($donor['group_name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-6 col-xl-2">
+                        <label class="form-label fw-semibold" for="accession_component">Component *</label>
+                        <select class="form-select" id="accession_component" name="component_type" required>
+                            <option value="WHOLE_BLOOD" data-storage="REFRIGERATOR">Whole blood</option>
+                            <option value="RBC" data-storage="REFRIGERATOR">RBC</option>
+                            <option value="PLASMA" data-storage="FREEZER">Plasma</option>
+                            <option value="PLATELET" data-storage="PLATELET_AGITATOR">Platelets</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 col-xl-2">
+                        <label class="form-label fw-semibold" for="accession_date">Collection date *</label>
+                        <input class="form-control" id="accession_date" name="collection_date" type="date" max="<?= date('Y-m-d') ?>" value="<?= date('Y-m-d') ?>" required>
+                    </div>
+                    <div class="col-md-6 col-xl-2">
+                        <label class="form-label fw-semibold" for="accession_volume">mL *</label>
+                        <input class="form-control" id="accession_volume" name="quantity_ml" type="number" min="1" max="99999.99" step="1" value="450" required>
+                    </div>
+                    <div class="col-md-6 col-xl-2">
+                        <label class="form-label fw-semibold" for="accession_location">Storage *</label>
+                        <select class="form-select" id="accession_location" name="storage_location_id" required>
+                            <option value="">Select location</option>
+                            <?php foreach ($locations as $location): ?>
+                                <?php if ($location['location_status'] === 'ACTIVE'): ?>
+                                    <option value="<?= (int)$location['storage_location_id'] ?>" data-storage="<?= e($location['storage_type']) ?>"><?= e($location['location_name']) ?></option>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <small class="text-muted"><i class="bi bi-magic me-1"></i>Bag number is generated automatically after the accession is validated.</small>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" id="screening_confirmed" name="screening_confirmed" type="checkbox" value="1" required>
+                            <label class="form-check-label small" for="screening_confirmed">I confirm this donation was collected and passed clinical screening.</label>
+                        </div>
+                    </div>
+                    <div class="col-12 d-flex justify-content-end">
+                        <button type="submit" class="btn btn-success fw-semibold"><i class="bi bi-plus-circle me-1"></i> Add to available inventory</button>
+                    </div>
+                </div>
+            </form>
+            <script>
+                (() => {
+                    const component = document.getElementById('accession_component');
+                    const location = document.getElementById('accession_location');
+                    const filterLocations = () => {
+                        const requiredType = component.selectedOptions[0].dataset.storage;
+                        Array.from(location.options).forEach((option) => {
+                            option.hidden = option.value !== '' && option.dataset.storage !== requiredType;
+                            if (option.hidden && option.selected) location.value = '';
+                        });
+                    };
+                    component.addEventListener('change', filterLocations);
+                    filterLocations();
+                })();
+            </script>
+        </div>
+    </div>
+
     <!-- Filter Form -->
     <div class="col-12">
         <div class="card card-bloodlink p-3 bg-light">

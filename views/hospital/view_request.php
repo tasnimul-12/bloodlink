@@ -185,12 +185,9 @@
                                         <form action="<?= url('/hospital/donations/confirm/' . $m['donation_id']) ?>" method="POST" class="row g-2 align-items-end">
                                             <?= csrf_field() ?>
                                             <div class="col-sm-5">
-                                                <label class="form-label small mb-1" for="donation-type-<?= (int)$m['donation_id'] ?>">Collected component</label>
-                                                <select class="form-select form-select-sm" id="donation-type-<?= (int)$m['donation_id'] ?>" name="donation_type" required>
-                                                    <option value="WHOLE_BLOOD" <?= $m['donation_type'] === 'WHOLE_BLOOD' ? 'selected' : '' ?>>Whole blood</option>
-                                                    <option value="PLASMA" <?= $m['donation_type'] === 'PLASMA' ? 'selected' : '' ?>>Plasma</option>
-                                                    <option value="PLATELET" <?= $m['donation_type'] === 'PLATELET' ? 'selected' : '' ?>>Platelets</option>
-                                                </select>
+                                                <span class="form-label small mb-1 d-block">Matched component</span>
+                                                <span class="badge bg-light text-dark border"><?= e($m['donation_type']) ?></span>
+                                                <input type="hidden" name="donation_type" value="<?= e($m['donation_type']) ?>">
                                             </div>
                                             <div class="col-sm-3">
                                                 <label class="form-label small mb-1" for="donation-volume-<?= (int)$m['donation_id'] ?>">Collected mL</label>
@@ -206,6 +203,12 @@
                                                     <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Confirm completed donation
                                                 </button>
                                             </div>
+                                        </form>
+                                        <form action="<?= url('/hospital/donations/cancel/' . $m['donation_id']) ?>" method="POST" class="mt-2">
+                                            <?= csrf_field() ?>
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Cancel this scheduled donation? The donor will be notified and the request may be matched with other donors.')">
+                                                <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Cancel pending donation
+                                            </button>
                                         </form>
                                     </div>
                                 <?php elseif (($m['donation_status'] ?? '') === 'COMPLETED'): ?>

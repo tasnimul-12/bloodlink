@@ -321,6 +321,235 @@ class InventoryService {
         }
     }
 
+    public static function accessionAdminDonation(array $data, int $userId): array {
+        $stringValue = static fn(string $key): string => is_string($data[$key] ?? null) ? trim($data[$key]) : '';
+        $donorId = filter_var(is_scalar($data['donor_id'] ?? null) ? $data['donor_id'] : null, FILTER_VALIDATE_INT);
+        $component = strtoupper($stringValue('component_type'));
+        $collectionDateInput = $stringValue('collection_date');
+        $quantityMl = filter_var(is_scalar($data['quantity_ml'] ?? null) ? $data['quantity_ml'] : null, FILTER_VALIDATE_FLOAT);
+        $locationId = filter_var(is_scalar($data['storage_location_id'] ?? null) ? $data['storage_location_id'] : null, FILTER_VALIDATE_INT);
+        $components = [
+            'WHOLE_BLOOD' => ['storage' => 'REFRIGERATOR', 'days' => 35],
+            'RBC' => ['storage' => 'REFRIGERATOR', 'days' => 35],
+            'PLASMA' => ['storage' => 'FREEZER', 'days' => 365],
+            'PLATELET' => ['storage' => 'PLATELET_AGITATOR', 'days' => 5]
+        ];
+        $collectionDate = DateTimeImmutable::createFromFormat('!Y-m-d', $collectionDateInput);
+        $today = new DateTimeImmutable('today');
+
+        if ($donorId === false
+            || !isset($components[$component])
+            || !$collectionDate
+            || $collectionDate->format('Y-m-d') !== $collectionDateInput
+            || $collectionDate > $today
+            || $quantityMl === false
+            || !is_finite((float)$quantityMl)
+            || $quantityMl <= 0
+            || $quantityMl > 99999.99
+            || $locationId === false) {
+            return ['success' => false, 'message' => 'Enter a valid donor, component, collection date, volume, and storage location.'];
+        }
+
+        $pdo = Database::getConnection();
+        $pdo->beginTransaction();
+
+        try {
+            $donorStmt = $pdo->prepare("
+                SELECT d.donor_id, d.blood_group_id, d.next_eligible_date, u.account_status,
+                       (SELECT MAX(prior.donation_date)
+                    FROM donations prior
+                    WHERE prior.donor_id = d.donor_id AND prior.donation_status = 'COMPLETED') AS last_donation_date
+                FROM donors d
+                JOIN users u ON u.user_id = d.user_id
+                WHERE d.donor_id = :donor_id
+                FOR UPDATE
+            ");
+            $donorStmt->execute([':donor_id' => $donorId]);
+            $donor = $donorStmt->fetch();
+            if (!$donor || $donor['account_status'] !== 'ACTIVE') {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Select an active donor account.'];
+            }
+
+            $interval = (int)$pdo->query(
+                "SELECT setting_value FROM system_settings WHERE setting_key = 'DONATION_MIN_INTERVAL_DAYS'"
+            )->fetchColumn();
+            if ($interval <= 0) {
+                $interval = 90;
+            }
+            $lastDonationDate = $donor['last_donation_date'] ? new DateTimeImmutable($donor['last_donation_date']) : null;
+            $earliestEligibleDate = $lastDonationDate
+                ? $lastDonationDate->modify("+{$interval} days")->format('Y-m-d')
+                : null;
+            if (($earliestEligibleDate && $collectionDate->format('Y-m-d') < $earliestEligibleDate)
+                || ($donor['next_eligible_date'] && $collectionDate->format('Y-m-d') < $donor['next_eligible_date'])) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'The donor was not yet eligible on that collection date.'];
+            }
+
+            if (($data['screening_confirmed'] ?? null) !== '1') {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Confirm that the collection is complete and screening has passed.'];
+            }
+
+            $storageStmt = $pdo->prepare("
+                                SELECT storage_location_id, capacity_units
+                FROM storage_locations
+                WHERE storage_location_id = :location_id
+                  AND storage_type = :storage_type
+                  AND location_status = 'ACTIVE'
+                FOR UPDATE
+            ");
+            $storageStmt->execute([
+                ':location_id' => $locationId,
+                ':storage_type' => $components[$component]['storage']
+            ]);
+            $storage = $storageStmt->fetch();
+            if (!$storage) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'Choose an active storage location suitable for the selected component.'];
+            }
+
+            $capacityStmt = $pdo->prepare("
+                                SELECT blood_bag_id
+                FROM blood_bags
+                WHERE storage_location_id = :location_id
+                  AND status IN ('AVAILABLE', 'RESERVED', 'EXPIRED')
+                                ORDER BY blood_bag_id ASC
+                                FOR UPDATE
+            ");
+            $capacityStmt->execute([':location_id' => $locationId]);
+                        $storedBagIds = $capacityStmt->fetchAll(PDO::FETCH_COLUMN);
+                        if (count($storedBagIds) >= (int)$storage['capacity_units']) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'The selected storage location has reached its unit capacity.'];
+            }
+
+            $expiryDate = $collectionDate->modify('+' . $components[$component]['days'] . ' days')->format('Y-m-d');
+            if ($expiryDate < $today->format('Y-m-d')) {
+                $pdo->rollBack();
+                return ['success' => false, 'message' => 'This collection has passed its component expiry date and cannot enter available inventory.'];
+            }
+            $componentCode = [
+                'WHOLE_BLOOD' => 'WB',
+                'RBC' => 'RBC',
+                'PLASMA' => 'PLS',
+                'PLATELET' => 'PLT'
+            ][$component];
+            $bagNumber = sprintf(
+                'BL-%s-%s-%s',
+                $componentCode,
+                $collectionDate->format('Ymd'),
+                strtoupper(bin2hex(random_bytes(6)))
+            );
+            $donationStmt = $pdo->prepare("
+                INSERT INTO donations (
+                    donor_id, donor_match_id, donation_type, donation_date, quantity_ml,
+                    screening_status, donation_status, notes
+                ) VALUES (
+                    :donor_id, NULL, :component, :donation_date, :quantity_ml,
+                    'PASSED', 'COMPLETED', 'Admin-recorded collection; screening confirmed passed.'
+                )
+            ");
+            $donationStmt->execute([
+                ':donor_id' => $donorId,
+                ':component' => $component,
+                ':donation_date' => $collectionDate->format('Y-m-d') . ' 12:00:00',
+                ':quantity_ml' => $quantityMl
+            ]);
+            $donationId = (int)$pdo->lastInsertId();
+
+            $bagStmt = $pdo->prepare("
+                INSERT INTO blood_bags (
+                    bag_number, donation_id, blood_group_id, component_type,
+                    collection_date, expiry_date, quantity_ml, status, storage_location_id
+                ) VALUES (
+                    :bag_number, :donation_id, :blood_group_id, :component,
+                    :collection_date, :expiry_date, :quantity_ml, 'AVAILABLE', :location_id
+                )
+            ");
+            $bagStmt->execute([
+                ':bag_number' => $bagNumber,
+                ':donation_id' => $donationId,
+                ':blood_group_id' => $donor['blood_group_id'],
+                ':component' => $component,
+                ':collection_date' => $collectionDate->format('Y-m-d'),
+                ':expiry_date' => $expiryDate,
+                ':quantity_ml' => $quantityMl,
+                ':location_id' => $locationId
+            ]);
+            $bagId = (int)$pdo->lastInsertId();
+
+            $movementStmt = $pdo->prepare("
+                INSERT INTO inventory_movements (
+                    blood_bag_id, from_location_id, to_location_id, movement_type,
+                    quantity_ml, reason, notes, performed_by
+                ) VALUES (
+                    :bag_id, NULL, :location_id, 'RECEIVED', :quantity_ml,
+                    'Admin accession after passed screening', :notes, :user_id
+                )
+            ");
+            $movementStmt->execute([
+                ':bag_id' => $bagId,
+                ':location_id' => $locationId,
+                ':quantity_ml' => $quantityMl,
+                ':notes' => "Accessioned as blood bag {$bagNumber}.",
+                ':user_id' => $userId
+            ]);
+
+            $eligibilityStmt = $pdo->prepare("
+                UPDATE donors
+                SET next_eligible_date = DATE_ADD(:collection_date, INTERVAL {$interval} DAY),
+                    eligibility_status = 'NOT_ELIGIBLE'
+                WHERE donor_id = :donor_id
+            ");
+            $eligibilityStmt->execute([
+                ':collection_date' => $collectionDate->format('Y-m-d'),
+                ':donor_id' => $donorId
+            ]);
+
+            $countStmt = $pdo->prepare("
+                SELECT COUNT(*)
+                FROM donations
+                WHERE donor_id = :donor_id AND donation_status = 'COMPLETED'
+            ");
+            $countStmt->execute([':donor_id' => $donorId]);
+            $totalDonations = (int)$countStmt->fetchColumn();
+            $recognitionStmt = $pdo->prepare("
+                INSERT IGNORE INTO donor_recognition (donor_id, recognition_level_id, achieved_date, notes)
+                SELECT :donor_id, recognition_level_id, CURRENT_DATE, :notes
+                FROM recognition_levels
+                WHERE minimum_donations <= :total_donations
+            ");
+            $recognitionStmt->execute([
+                ':donor_id' => $donorId,
+                ':notes' => "Achieved upon {$totalDonations} completed donations",
+                ':total_donations' => $totalDonations
+            ]);
+
+            AuditService::log('ADMIN_ACCESSION_DONATION', 'blood_bags', $bagId, null, [
+                'bag_number' => $bagNumber,
+                'donation_id' => $donationId,
+                'donor_id' => $donorId,
+                'component_type' => $component,
+                'quantity_ml' => $quantityMl
+            ], $userId);
+
+            $pdo->commit();
+            return [
+                'success' => true,
+                'bag_number' => $bagNumber,
+                'message' => "Blood bag {$bagNumber} was accessioned into available inventory."
+            ];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('Admin blood bag accession failed: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Could not accession this bag. Check for a duplicate bag number and valid inventory records.'];
+        }
+    }
+
     public static function getStorageLocations(): array {
         $pdo = Database::getConnection();
         return $pdo->query("SELECT * FROM storage_locations ORDER BY storage_location_id ASC")->fetchAll();

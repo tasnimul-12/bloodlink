@@ -31,6 +31,8 @@ Update `app/config/config.php` before starting the application if your MySQL cre
 	 database/BloodLink_finalsql.sql
 	 database/migrations/01_fix_fulfillment_user.sql
 	 database/migrations/02_link_donations_to_matches.sql
+	 database/migrations/03_add_rbc_donation_type.sql
+	 database/migrations/04_create_donation_events.sql
 	 database/seeds/demo_seed.sql
 	 ```
 
@@ -41,6 +43,8 @@ Update `app/config/config.php` before starting the application if your MySQL cre
 	 mysql -u root -p bloodlink_db < database/BloodLink_finalsql.sql
 	 mysql -u root -p bloodlink_db < database/migrations/01_fix_fulfillment_user.sql
 	 mysql -u root -p bloodlink_db < database/migrations/02_link_donations_to_matches.sql
+	 mysql -u root -p bloodlink_db < database/migrations/03_add_rbc_donation_type.sql
+	 mysql -u root -p bloodlink_db < database/migrations/04_create_donation_events.sql
 	 mysql -u root -p bloodlink_db < database/seeds/demo_seed.sql
 	 ```
 
@@ -64,7 +68,8 @@ These credentials are for local development only. Change or remove seeded accoun
 - Donor registration, profile management, donation history, notifications, and match responses
 - Accepted donor matches become scheduled donations for the related hospital to confirm after collection; confirmation updates donor eligibility, recognition, inventory, and FEFO request fulfillment
 - Hospital registration, blood requests, donor matching, request fulfillment, and hospital inventory
-- Administrator dashboards, donor and hospital management, inventory transfers and discards, read-only donation records, reports, settings, and audit logs
+- Administrator dashboards, hospital-linked blood requests with donor matching, screened blood-bag accession, inventory transfers and discards, donation-event publishing, reports, settings, and audit logs
+- Public motivational donation-event information with no RSVP or approval workflow
 - CSRF protection, session-based authentication, role-based access control, prepared database statements, FEFO inventory ordering, and expiry exclusion
 
 ## Project Structure
@@ -99,6 +104,7 @@ php tests/test_rbac_and_auth.php
 php tests/test_fefo_expiry.php
 php tests/test_fulfillment_concurrency.php
 php tests/test_donor_confirmation_flow.php
+php tests/test_admin_inventory_accession.php
 ```
 
 The tests use the configured database and may change seeded workflow records or create a temporary donor account. Run them against a development database only; reload the demo seed before repeating workflow tests.

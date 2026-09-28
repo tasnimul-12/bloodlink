@@ -6,8 +6,14 @@
 require_once __DIR__ . '/../core/Controller.php';
 require_once __DIR__ . '/../services/InventoryService.php';
 require_once __DIR__ . '/../services/AuditService.php';
+require_once __DIR__ . '/../services/MatchingService.php';
 
 class AdminController extends Controller {
+    private function stringInput(string $key): string {
+        $value = $this->request->input($key, '');
+        return is_string($value) || is_numeric($value) ? trim((string)$value) : '';
+    }
+
     public function dashboard(): void {
         $pdo = Database::getConnection();
 
@@ -61,10 +67,67 @@ class AdminController extends Controller {
             ORDER BY h.created_at DESC
         ")->fetchAll();
 
+        $staffMembers = $pdo->query("
+            SELECT hs.staff_id, hs.staff_name, hs.designation, hs.staff_status,
+                   h.hospital_name, h.approval_status, u.username, u.email
+            FROM hospital_staff hs
+            JOIN hospitals h ON h.hospital_id = hs.hospital_id
+            JOIN users u ON u.user_id = hs.user_id
+            ORDER BY h.hospital_name, hs.staff_name
+        ")->fetchAll();
+
         $this->render('admin/hospitals', [
             'title' => 'Hospital Verification & Management — BloodLink',
-            'hospitals' => $hospitals
+            'hospitals' => $hospitals,
+            'staffMembers' => $staffMembers
         ]);
+    }
+
+    public function updateStaffStatus(int $id): void {
+        $this->validateCsrf();
+        $user = Session::user();
+        $newStatus = strtoupper($this->request->input('status', ''));
+
+        if (!in_array($newStatus, ['ACTIVE', 'INACTIVE'], true)) {
+            Session::setFlash('danger', 'Invalid staff status specified.');
+            $this->redirect('/admin/hospitals');
+            return;
+        }
+
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare("
+            SELECT hs.staff_name, hs.staff_status, h.hospital_name, h.approval_status
+            FROM hospital_staff hs
+            JOIN hospitals h ON h.hospital_id = hs.hospital_id
+            WHERE hs.staff_id = :id
+        ");
+        $stmt->execute([':id' => $id]);
+        $staff = $stmt->fetch();
+
+        if (!$staff) {
+            Session::setFlash('danger', 'Hospital staff member not found.');
+            $this->redirect('/admin/hospitals');
+            return;
+        }
+        if ($newStatus === 'ACTIVE' && $staff['approval_status'] !== 'APPROVED') {
+            Session::setFlash('warning', 'Approve the hospital before activating its staff accounts.');
+            $this->redirect('/admin/hospitals');
+            return;
+        }
+
+        $update = $pdo->prepare('UPDATE hospital_staff SET staff_status = :status WHERE staff_id = :id');
+        $update->execute([':status' => $newStatus, ':id' => $id]);
+        AuditService::log(
+            'HOSPITAL_STAFF_STATUS_UPDATE',
+            'hospital_staff',
+            $id,
+            ['staff_status' => $staff['staff_status']],
+            ['staff_status' => $newStatus],
+            (int)$user['user_id']
+        );
+
+        Session::setFlash('success', "{$staff['staff_name']} at {$staff['hospital_name']} is now {$newStatus}.");
+        $this->redirect('/admin/hospitals');
     }
 
     public function updateHospitalStatus(int $id): void {
@@ -121,6 +184,14 @@ class AdminController extends Controller {
         $expiredBags   = InventoryService::getExpiredInventory();
         $locations     = InventoryService::getStorageLocations();
         $bloodGroups   = $pdo->query("SELECT * FROM blood_groups ORDER BY blood_group_id ASC")->fetchAll();
+        $donors = $pdo->query("
+            SELECT d.donor_id, d.full_name, bg.group_name
+            FROM donors d
+            JOIN blood_groups bg ON bg.blood_group_id = d.blood_group_id
+            JOIN users u ON u.user_id = d.user_id
+            WHERE u.account_status = 'ACTIVE'
+            ORDER BY d.full_name ASC
+        ")->fetchAll();
 
         $this->render('admin/inventory', [
             'title' => 'Inventory & FEFO Management — BloodLink',
@@ -128,9 +199,278 @@ class AdminController extends Controller {
             'nearExpiry'    => $nearExpiry,
             'expiredBags'   => $expiredBags,
             'locations'     => $locations,
+            'donors'        => $donors,
             'bloodGroups'   => $bloodGroups,
             'filters'       => $this->request->all()
         ]);
+    }
+
+    public function accessionBloodBag(): void {
+        $this->validateCsrf();
+        $user = Session::user();
+        $result = InventoryService::accessionAdminDonation($this->request->all(), (int)$user['user_id']);
+
+        Session::setFlash($result['success'] ? 'success' : 'danger', $result['message']);
+        $this->redirect('/admin/inventory');
+    }
+
+    public function requests(): void {
+        $pdo = Database::getConnection();
+        $hospitals = $pdo->query("
+            SELECT DISTINCT h.hospital_id, h.hospital_name, h.city
+            FROM hospitals h
+            JOIN hospital_staff hs ON hs.hospital_id = h.hospital_id
+            WHERE h.approval_status = 'APPROVED' AND hs.staff_status = 'ACTIVE'
+            ORDER BY h.hospital_name ASC
+        ")->fetchAll();
+        $bloodGroups = $pdo->query("SELECT blood_group_id, group_name FROM blood_groups ORDER BY blood_group_id ASC")->fetchAll();
+        $requests = $pdo->query("
+            SELECT br.request_id, br.request_type, br.urgency, br.status, br.required_date,
+                   br.request_date, h.hospital_name,
+                   GROUP_CONCAT(CONCAT(bg.group_name, ' ', ri.component_type, ' ',
+                       FORMAT(ri.quantity_requested, 0), ' mL') ORDER BY ri.request_item_id SEPARATOR ', ') AS requested_items,
+                   (SELECT COUNT(*) FROM donor_matches dm
+                    JOIN request_items match_items ON match_items.request_item_id = dm.request_item_id
+                    WHERE match_items.request_id = br.request_id AND dm.match_status = 'NOTIFIED') AS pending_donor_invites
+            FROM blood_requests br
+            JOIN hospitals h ON h.hospital_id = br.hospital_id
+            JOIN request_items ri ON ri.request_id = br.request_id
+            JOIN blood_groups bg ON bg.blood_group_id = ri.blood_group_id
+            GROUP BY br.request_id
+            ORDER BY br.request_date DESC
+            LIMIT 50
+        ")->fetchAll();
+
+        $this->render('admin/requests', [
+            'title' => 'Admin Blood Requests — BloodLink',
+            'hospitals' => $hospitals,
+            'bloodGroups' => $bloodGroups,
+            'requests' => $requests
+        ]);
+    }
+
+    public function createBloodRequest(): void {
+        $this->validateCsrf();
+        $user = Session::user();
+        $hospitalValue = $this->request->input('hospital_id');
+        $groupValue = $this->request->input('blood_group_id');
+        $quantityValue = $this->request->input('quantity_requested');
+        $hospitalId = filter_var(is_scalar($hospitalValue) ? $hospitalValue : null, FILTER_VALIDATE_INT);
+        $groupId = filter_var(is_scalar($groupValue) ? $groupValue : null, FILTER_VALIDATE_INT);
+        $component = strtoupper($this->stringInput('component_type'));
+        $quantity = filter_var(is_scalar($quantityValue) ? $quantityValue : null, FILTER_VALIDATE_FLOAT);
+        $requestType = strtoupper($this->stringInput('request_type'));
+        $urgency = strtoupper($this->stringInput('urgency'));
+        $requiredDateInput = $this->stringInput('required_date');
+        $requiredTime = $this->stringInput('required_time');
+        $reason = $this->stringInput('reason');
+        $requiredDate = DateTimeImmutable::createFromFormat('!Y-m-d', $requiredDateInput);
+        $today = new DateTimeImmutable('today');
+        $validTime = $requiredTime === '' || preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $requiredTime) === 1;
+        $valid = $hospitalId !== false
+            && $groupId !== false
+            && in_array($component, ['WHOLE_BLOOD', 'RBC', 'PLASMA', 'PLATELET'], true)
+            && $quantity !== false && is_finite((float)$quantity) && $quantity > 0 && $quantity <= 99999.99
+            && in_array($requestType, ['EMERGENCY', 'ROUTINE', 'SURGERY', 'MATERNITY', 'OTHER'], true)
+            && in_array($urgency, ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'], true)
+            && $requiredDate && $requiredDate->format('Y-m-d') === $requiredDateInput && $requiredDate >= $today
+            && $validTime
+            && $reason !== '' && strlen($reason) <= 500;
+
+        if (!$valid) {
+            Session::setFlash('danger', 'Enter a valid approved hospital, blood requirement, future date, and clinical reason.');
+            $this->redirect('/admin/requests');
+            return;
+        }
+
+        $pdo = Database::getConnection();
+        $pdo->beginTransaction();
+        try {
+            $staffStmt = $pdo->prepare("
+                SELECT hs.staff_id, hs.hospital_id
+                FROM hospital_staff hs
+                JOIN hospitals h ON h.hospital_id = hs.hospital_id
+                WHERE hs.hospital_id = :hospital_id
+                  AND hs.staff_status = 'ACTIVE'
+                  AND h.approval_status = 'APPROVED'
+                ORDER BY hs.staff_id ASC
+                LIMIT 1
+                FOR UPDATE
+            ");
+            $staffStmt->execute([':hospital_id' => $hospitalId]);
+            $staff = $staffStmt->fetch();
+            $groupStmt = $pdo->prepare('SELECT blood_group_id FROM blood_groups WHERE blood_group_id = :group_id');
+            $groupStmt->execute([':group_id' => $groupId]);
+            if (!$staff || !$groupStmt->fetchColumn()) {
+                $pdo->rollBack();
+                Session::setFlash('danger', 'Choose an approved hospital with active staff and a valid blood group.');
+                $this->redirect('/admin/requests');
+                return;
+            }
+
+            $requestStmt = $pdo->prepare("
+                INSERT INTO blood_requests (
+                    hospital_id, requested_by, request_type, urgency, status,
+                    required_date, required_time, reason, request_date
+                ) VALUES (
+                    :hospital_id, :staff_id, :request_type, :urgency, 'PENDING',
+                    :required_date, :required_time, :reason, NOW()
+                )
+            ");
+            $requestStmt->execute([
+                ':hospital_id' => $hospitalId,
+                ':staff_id' => $staff['staff_id'],
+                ':request_type' => $requestType,
+                ':urgency' => $urgency,
+                ':required_date' => $requiredDateInput,
+                ':required_time' => $requiredTime !== '' ? $requiredTime : null,
+                ':reason' => $reason
+            ]);
+            $requestId = (int)$pdo->lastInsertId();
+            $itemStmt = $pdo->prepare("
+                INSERT INTO request_items (
+                    request_id, blood_group_id, component_type, quantity_requested, quantity_fulfilled
+                ) VALUES (:request_id, :group_id, :component, :quantity, 0)
+            ");
+            $itemStmt->execute([
+                ':request_id' => $requestId,
+                ':group_id' => $groupId,
+                ':component' => $component,
+                ':quantity' => $quantity
+            ]);
+            AuditService::log('ADMIN_CREATE_BLOOD_REQUEST', 'blood_requests', $requestId, null, [
+                'hospital_id' => $hospitalId,
+                'blood_group_id' => $groupId,
+                'component_type' => $component,
+                'quantity_requested' => $quantity
+            ], (int)$user['user_id']);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('Admin blood request creation failed: ' . $e->getMessage());
+            Session::setFlash('danger', 'The blood request could not be created. No changes were saved.');
+            $this->redirect('/admin/requests');
+            return;
+        }
+
+        try {
+            $matching = MatchingService::matchDonorsForRequest($requestId, (int)$user['user_id']);
+        } catch (Throwable $e) {
+            error_log('Admin request donor matching failed: ' . $e->getMessage());
+            $matching = ['success' => false, 'message' => 'Donor matching failed unexpectedly.'];
+        }
+        $message = "Hospital blood request #{$requestId} was created.";
+        if ($matching['success']) {
+            $message .= ' ' . $matching['message'];
+        } else {
+            $message .= ' Donor matching can be retried later: ' . $matching['message'];
+        }
+        Session::setFlash($matching['success'] ? 'success' : 'warning', $message);
+        $this->redirect('/admin/requests');
+    }
+
+    public function matchAdminRequest(int $id): void {
+        $this->validateCsrf();
+        $user = Session::user();
+        $result = MatchingService::matchDonorsForRequest($id, (int)$user['user_id']);
+        Session::setFlash($result['success'] ? 'success' : 'warning', $result['message']);
+        $this->redirect('/admin/requests');
+    }
+
+    public function events(): void {
+        $pdo = Database::getConnection();
+        $events = $pdo->query("
+            SELECT * FROM donation_events
+            ORDER BY CASE WHEN event_status = 'SCHEDULED' AND event_date >= NOW() THEN 0 ELSE 1 END,
+                     event_date ASC
+        ")->fetchAll();
+        $this->render('admin/events', [
+            'title' => 'Donation Events — BloodLink',
+            'events' => $events
+        ]);
+    }
+
+    public function createEvent(): void {
+        $this->validateCsrf();
+        $user = Session::user();
+        $title = $this->stringInput('title');
+        $invitation = $this->stringInput('invitation');
+        $description = $this->stringInput('description');
+        $eventDateInput = $this->stringInput('event_date');
+        $eventDate = DateTimeImmutable::createFromFormat('!Y-m-d\\TH:i', $eventDateInput);
+        $venue = $this->stringInput('venue');
+        $address = $this->stringInput('address');
+        $city = $this->stringInput('city');
+        $contactInfo = $this->stringInput('contact_info');
+        $now = new DateTimeImmutable();
+
+        if (!$eventDate || $eventDate->format('Y-m-d\\TH:i') !== $eventDateInput || $eventDate <= $now
+            || $title === '' || strlen($title) > 140
+            || $invitation === '' || strlen($invitation) > 180
+            || $description === '' || strlen($description) > 10000
+            || $venue === '' || strlen($venue) > 180
+            || $address === '' || strlen($address) > 255
+            || $city === '' || strlen($city) > 80
+            || strlen($contactInfo) > 160) {
+            Session::setFlash('danger', 'Enter complete event details and schedule it for a future date and time.');
+            $this->redirect('/admin/events');
+            return;
+        }
+
+        $pdo = Database::getConnection();
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO donation_events (
+                    title, invitation, description, event_date, venue, address,
+                    city, contact_info, created_by
+                ) VALUES (
+                    :title, :invitation, :description, :event_date, :venue, :address,
+                    :city, :contact_info, :created_by
+                )
+            ");
+            $stmt->execute([
+                ':title' => $title,
+                ':invitation' => $invitation,
+                ':description' => $description,
+                ':event_date' => $eventDate->format('Y-m-d H:i:00'),
+                ':venue' => $venue,
+                ':address' => $address,
+                ':city' => $city,
+                ':contact_info' => $contactInfo !== '' ? $contactInfo : null,
+                ':created_by' => $user['user_id']
+            ]);
+            $eventId = (int)$pdo->lastInsertId();
+            AuditService::log('CREATE_DONATION_EVENT', 'donation_events', $eventId, null, [
+                'title' => $title,
+                'event_date' => $eventDate->format('Y-m-d H:i:s')
+            ], (int)$user['user_id']);
+            Session::setFlash('success', 'Donation event scheduled and published.');
+        } catch (Throwable $e) {
+            error_log('Donation event creation failed: ' . $e->getMessage());
+            Session::setFlash('danger', 'The event could not be scheduled.');
+        }
+        $this->redirect('/admin/events');
+    }
+
+    public function cancelEvent(int $id): void {
+        $this->validateCsrf();
+        $user = Session::user();
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare("SELECT title, event_status FROM donation_events WHERE event_id = :id");
+        $stmt->execute([':id' => $id]);
+        $event = $stmt->fetch();
+        if (!$event || $event['event_status'] !== 'SCHEDULED') {
+            Session::setFlash('warning', 'That event is not available to cancel.');
+            $this->redirect('/admin/events');
+            return;
+        }
+        $pdo->prepare("UPDATE donation_events SET event_status = 'CANCELLED' WHERE event_id = :id")
+            ->execute([':id' => $id]);
+        AuditService::log('CANCEL_DONATION_EVENT', 'donation_events', $id, ['event_status' => 'SCHEDULED'], ['event_status' => 'CANCELLED'], (int)$user['user_id']);
+        Session::setFlash('success', "Event '{$event['title']}' was cancelled.");
+        $this->redirect('/admin/events');
     }
 
     public function discardBag(): void {

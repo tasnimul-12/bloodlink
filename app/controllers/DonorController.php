@@ -94,6 +94,15 @@ class DonorController extends Controller {
         $matchStmt->execute([':donor_id' => $donor['donor_id']]);
         $pendingMatches = $matchStmt->fetchAll();
 
+        $activeDonationStmt = $pdo->prepare("
+            SELECT donation_id
+            FROM donations
+            WHERE donor_id = :donor_id AND donation_status = 'SCHEDULED'
+            LIMIT 1
+        ");
+        $activeDonationStmt->execute([':donor_id' => $donor['donor_id']]);
+        $hasScheduledDonation = (bool)$activeDonationStmt->fetchColumn();
+
         // 5. Notifications
         $notifStmt = $pdo->prepare("
             SELECT * FROM notifications 
@@ -112,6 +121,7 @@ class DonorController extends Controller {
             'nextTier' => $nextTier,
             'recentDonations' => $recentDonations,
             'pendingMatches' => $pendingMatches,
+            'hasScheduledDonation' => $hasScheduledDonation,
             'notifications' => $notifications
         ]);
     }

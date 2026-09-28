@@ -171,21 +171,77 @@ class HospitalController extends Controller {
         $urgency  = $this->request->input('urgency', 'HIGH');
         $reqDate  = $this->request->input('required_date', '');
         $reqTime  = $this->request->input('required_time', null);
-        $reason   = trim($this->request->input('reason', ''));
-        $notes    = trim($this->request->input('special_notes', ''));
+        $reasonValue = $this->request->input('reason', '');
+        $notesValue = $this->request->input('special_notes', '');
+        $reason = is_string($reasonValue) ? trim($reasonValue) : '';
+        $notes = is_string($notesValue) ? trim($notesValue) : '';
 
         // Items arrays
         $groupIds   = $this->request->input('blood_group_id', []);
         $components = $this->request->input('component_type', []);
         $quantities = $this->request->input('quantity_requested', []);
 
-        if (!$reqDate || !$reason || empty($groupIds)) {
-            Session::setFlash('danger', 'Please provide required dates, clinical reason, and at least one blood component line item.');
+        $requestTypes = ['EMERGENCY', 'ROUTINE', 'SURGERY', 'MATERNITY', 'OTHER'];
+        $urgencyLevels = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+        $requiredDate = is_string($reqDate) ? DateTimeImmutable::createFromFormat('!Y-m-d', $reqDate) : false;
+        $validDate = $requiredDate && $requiredDate->format('Y-m-d') === $reqDate
+            && $requiredDate >= new DateTimeImmutable('today');
+        $validTime = $reqTime === null || $reqTime === ''
+            || (is_string($reqTime) && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $reqTime) === 1);
+
+        if (!in_array($reqType, $requestTypes, true)
+            || !in_array($urgency, $urgencyLevels, true)
+            || !$validDate
+            || !$validTime
+            || !$reason
+            || strlen($reason) > 500
+            || strlen($notes) > 1000) {
+            Session::setFlash('danger', 'Enter valid request details, including a future required date and a reason of at most 500 characters.');
+            $this->redirect('/hospital/requests/create');
+            return;
+        }
+
+        if (!is_array($groupIds) || !is_array($components) || !is_array($quantities)
+            || count($groupIds) === 0
+            || count($groupIds) !== count($components)
+            || count($groupIds) !== count($quantities)) {
+            Session::setFlash('danger', 'Provide at least one complete blood component line item.');
             $this->redirect('/hospital/requests/create');
             return;
         }
 
         $pdo = Database::getConnection();
+        $validBloodGroups = array_map(
+            'intval',
+            $pdo->query('SELECT blood_group_id FROM blood_groups')->fetchAll(PDO::FETCH_COLUMN)
+        );
+        $validComponents = ['WHOLE_BLOOD', 'RBC', 'PLASMA', 'PLATELET'];
+        $validatedItems = [];
+        foreach ($groupIds as $index => $groupValue) {
+            $groupId = filter_var($groupValue, FILTER_VALIDATE_INT);
+            $component = $components[$index] ?? null;
+            $quantityValue = $quantities[$index] ?? null;
+
+            if ($groupId === false
+                || !in_array($groupId, $validBloodGroups, true)
+                || !is_string($component)
+                || !in_array($component, $validComponents, true)
+                || !is_numeric($quantityValue)
+                || !is_finite((float)$quantityValue)
+                || (float)$quantityValue <= 0
+                || (float)$quantityValue > 99999.99) {
+                Session::setFlash('danger', 'Every line item must have a valid blood group, component, and positive volume.');
+                $this->redirect('/hospital/requests/create');
+                return;
+            }
+
+            $validatedItems[] = [
+                'blood_group_id' => $groupId,
+                'component_type' => $component,
+                'quantity_requested' => (float)$quantityValue
+            ];
+        }
+
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare("
@@ -214,19 +270,13 @@ class HospitalController extends Controller {
                 VALUES (:req_id, :group_id, :comp, :qty, 0.00)
             ");
 
-            for ($i = 0; $i < count($groupIds); $i++) {
-                $gId = (int)$groupIds[$i];
-                $cType = $components[$i] ?? 'WHOLE_BLOOD';
-                $qty = (float)($quantities[$i] ?? 450.00);
-
-                if ($gId > 0 && $qty > 0) {
-                    $itemStmt->execute([
-                        ':req_id'   => $requestId,
-                        ':group_id' => $gId,
-                        ':comp'     => $cType,
-                        ':qty'      => $qty
-                    ]);
-                }
+            foreach ($validatedItems as $item) {
+                $itemStmt->execute([
+                    ':req_id'   => $requestId,
+                    ':group_id' => $item['blood_group_id'],
+                    ':comp'     => $item['component_type'],
+                    ':qty'      => $item['quantity_requested']
+                ]);
             }
 
             AuditService::log('CREATE_REQUEST', 'blood_requests', $requestId, null, ['urgency' => $urgency, 'type' => $reqType], $user['user_id']);
@@ -390,12 +440,61 @@ class HospitalController extends Controller {
         $this->redirect($requestId ? '/hospital/requests/view/' . (int)$requestId : '/hospital/dashboard');
     }
 
+    public function cancelDonation(int $id): void {
+        $this->validateCsrf();
+        $user = Session::user();
+        $staff = $this->getHospitalStaff($user['user_id']);
+
+        if (!$staff || $staff['approval_status'] !== 'APPROVED' || $staff['staff_status'] !== 'ACTIVE') {
+            Session::setFlash('danger', 'Only active staff at an approved hospital can cancel a donation.');
+            $this->redirect('/hospital/dashboard');
+            return;
+        }
+
+        $result = DonationService::cancelMatchedDonation(
+            $id,
+            (int)$user['user_id'],
+            (int)$staff['hospital_id']
+        );
+
+        if (!$result['success']) {
+            Session::setFlash('danger', $result['message']);
+            $this->redirect('/hospital/requests');
+            return;
+        }
+
+        $matching = MatchingService::matchDonorsForRequest(
+            $result['request_id'],
+            (int)$user['user_id'],
+            null,
+            (int)$staff['hospital_id']
+        );
+        $message = $result['message'];
+        if ($matching['success'] && $matching['notified_count'] > 0) {
+            $message .= " {$matching['notified_count']} other compatible donor(s) have been notified.";
+        }
+
+        Session::setFlash('success', $message);
+        $this->redirect('/hospital/requests/view/' . $result['request_id']);
+    }
+
     public function matchRequest(int $id): void {
         $this->validateCsrf();
         $user = Session::user();
         $staff = $this->getHospitalStaff($user['user_id']);
 
-        $result = MatchingService::matchDonorsForRequest($id, $user['user_id']);
+        if (!$staff || $staff['staff_status'] !== 'ACTIVE' || $staff['approval_status'] !== 'APPROVED') {
+            Session::setFlash('danger', 'Only active staff at an approved hospital can match donors.');
+            $this->redirect('/hospital/dashboard');
+            return;
+        }
+
+        $result = MatchingService::matchDonorsForRequest(
+            $id,
+            (int)$user['user_id'],
+            null,
+            (int)$staff['hospital_id']
+        );
 
         if ($result['success']) {
             Session::setFlash('success', $result['message']);

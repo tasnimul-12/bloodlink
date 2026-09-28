@@ -245,7 +245,7 @@ class AuthService {
 
             $staffStmt = $pdo->prepare("
                 INSERT INTO hospital_staff (hospital_id, user_id, staff_name, designation, staff_status, joined_at)
-                VALUES (:hospital_id, :user_id, :staff_name, :designation, 'ACTIVE', CURRENT_DATE)
+                VALUES (:hospital_id, :user_id, :staff_name, :designation, 'INACTIVE', CURRENT_DATE)
             ");
             $staffStmt->execute([
                 ':hospital_id' => $hospitalId,
@@ -257,7 +257,7 @@ class AuthService {
             AuditService::log('REGISTER_HOSPITAL_STAFF', 'hospital_staff', $userId, null, ['hospital_id' => $hospitalId], $userId);
 
             $pdo->commit();
-            return ['success' => true, 'message' => 'Registration submitted! Hospital accounts undergo administrator verification before requests can be processed.'];
+            return ['success' => true, 'message' => 'Registration submitted. An administrator must verify and activate your staff account before you can sign in.'];
         } catch (Exception $e) {
             $pdo->rollBack();
             error_log("Staff registration error: " . $e->getMessage());

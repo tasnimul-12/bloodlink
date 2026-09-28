@@ -6,6 +6,7 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../core/Session.php';
 require_once __DIR__ . '/AuditService.php';
+require_once __DIR__ . '/MatchingService.php';
 
 class AuthService {
     public static function authenticate(string $login, string $password): array {
@@ -162,6 +163,11 @@ class AuthService {
             AuditService::log('REGISTER_DONOR', 'donors', $donorId, null, ['full_name' => $fullName, 'city' => $city], $userId);
 
             $pdo->commit();
+            try {
+                MatchingService::matchNewDonorToOpenRequests($donorId, $userId);
+            } catch (Throwable $e) {
+                error_log('Automatic donor matching failed: ' . $e->getMessage());
+            }
             return ['success' => true, 'message' => 'Registration successful! You may now sign in.'];
         } catch (Exception $e) {
             $pdo->rollBack();

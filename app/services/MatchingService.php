@@ -11,7 +11,7 @@ class MatchingService {
     /**
      * Finds eligible donors and creates match records & notifications
      */
-    public static function matchDonorsForRequest(int $requestId, int $actorUserId): array {
+    public static function matchDonorsForRequest(int $requestId, int $actorUserId, ?int $donorId = null): array {
         $pdo = Database::getConnection();
 
         // Get request and hospital details
@@ -26,6 +26,9 @@ class MatchingService {
 
         if (!$request) {
             return ['success' => false, 'message' => 'Request not found.'];
+        }
+        if (!in_array($request['status'], ['PENDING', 'MATCHING', 'PARTIALLY_FULFILLED'], true)) {
+            return ['success' => false, 'message' => 'This request is no longer accepting donor matches.'];
         }
 
         // Get request items
@@ -65,8 +68,11 @@ class MatchingService {
                       AND (d.next_eligible_date IS NULL OR d.next_eligible_date <= CURRENT_DATE)
                       AND u.account_status = 'ACTIVE'
                 ";
+                if ($donorId !== null) {
+                    $donorSql .= ' AND d.donor_id = ?';
+                }
                 $donorStmt = $pdo->prepare($donorSql);
-                $donorStmt->execute($compatibleGroups);
+                $donorStmt->execute($donorId === null ? $compatibleGroups : [...$compatibleGroups, $donorId]);
                 $candidates = $donorStmt->fetchAll();
 
                 foreach ($candidates as $donor) {
@@ -149,6 +155,21 @@ class MatchingService {
         } catch (Exception $e) {
             $pdo->rollBack();
             return ['success' => false, 'message' => 'Matching failed: ' . $e->getMessage()];
+        }
+    }
+
+    public static function matchNewDonorToOpenRequests(int $donorId, int $actorUserId): void {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->query("
+            SELECT DISTINCT br.request_id
+            FROM blood_requests br
+            JOIN request_items ri ON ri.request_id = br.request_id
+            WHERE br.status IN ('PENDING', 'MATCHING', 'PARTIALLY_FULFILLED')
+              AND ri.quantity_fulfilled < ri.quantity_requested
+        ");
+
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $requestId) {
+            self::matchDonorsForRequest((int)$requestId, $actorUserId, $donorId);
         }
     }
 

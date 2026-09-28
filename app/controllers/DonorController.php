@@ -30,6 +30,12 @@ class DonorController extends Controller {
             die("Donor profile not linked to user account.");
         }
 
+        try {
+            MatchingService::matchNewDonorToOpenRequests((int)$donor['donor_id'], (int)$user['user_id']);
+        } catch (Throwable $e) {
+            error_log('Donor dashboard matching failed: ' . $e->getMessage());
+        }
+
         $pdo = Database::getConnection();
 
         // 1. Total successful donations

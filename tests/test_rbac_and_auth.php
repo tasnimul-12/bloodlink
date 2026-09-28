@@ -43,12 +43,21 @@ $newDonorData = [
     'full_name'       => 'Test Donor Automation',
     'date_of_birth'   => '1998-05-15',
     'gender'          => 'FEMALE',
-    'blood_group_id'  => 3, // B+
+    'blood_group_id'  => 8, // O-
     'city'            => 'Sylhet',
     'address'         => 'Zindabazar'
 ];
 $regRes = AuthService::registerDonor($newDonorData);
 assert($regRes['success'] === true, "New donor registration failed: " . ($regRes['message'] ?? ''));
+$newDonorStmt = Database::getConnection()->prepare('SELECT donor_id, user_id FROM donors WHERE full_name = :full_name ORDER BY donor_id DESC LIMIT 1');
+$newDonorStmt->execute([':full_name' => $newDonorData['full_name']]);
+$newDonor = $newDonorStmt->fetch();
+$newDonorMatchStmt = Database::getConnection()->prepare("SELECT COUNT(*) FROM donor_matches WHERE donor_id = :donor_id AND match_status = 'NOTIFIED'");
+$newDonorMatchStmt->execute([':donor_id' => $newDonor['donor_id']]);
+assert((int)$newDonorMatchStmt->fetchColumn() > 0, 'A newly registered eligible donor must be matched to compatible open requests automatically.');
+$newDonorNotificationStmt = Database::getConnection()->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = :user_id AND notification_type = 'URGENT_MATCH'");
+$newDonorNotificationStmt->execute([':user_id' => $newDonor['user_id']]);
+assert((int)$newDonorNotificationStmt->fetchColumn() > 0, 'A newly registered compatible donor must receive an automatic match notification.');
 echo "  [OK] New donor registration passed: {$newDonorData['username']}\n";
 
 // 6. Test Logging in as the new Donor

@@ -1,5 +1,10 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
+
+    # Keep application internals, tests, documentation, and SQL files off the web.
+    RewriteRule ^(?:app|database|docs|routes|tests|views)(?:/|$) - [F,L,NC]
+    RewriteRule \.(?:sql|md)$ - [F,L,NC]
+
     RewriteRule ^$ public/index.php [L]
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
